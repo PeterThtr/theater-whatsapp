@@ -141,3 +141,10 @@ Code: `code/getriebe/`. Generator ist `build4.py` (nutzt `build3.py`, `worm3.py`
 2. Teleskop V2 komplett drucken und montieren: Durchhang, Stick-Slip, Federführung.
 3. Winde mit den winde4-Teilen: Lagersitz, Halt der eingeklebten Welle, Bremse.
 4. TPU-Prothese nach Scan; der Fuß mit den Flügeln ist vorbereitet.
+
+---
+
+# Weiteres Projekt: Große Uhr (Schrittmotor-Wanduhr)
+
+Übergabe in `grossuhr/UEBERGABE.md`, Firmware in `grossuhr/GrossUhr/GrossUhr.ino` (ESP32, Nema 17 + A4988, Webinterface, Art-Net).
+Die in der Übergabe genannten Pfade unter `/home/claude/...` (Firmware, Test-Harness `test_main.cpp`, Stubs, `pw.js`) stammen aus der früheren Sitzung. Die Tests und Stubs liegen **nicht** im Repo.
