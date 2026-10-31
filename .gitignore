@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+# Generator-Ausgaben; nur die von verify6.py benötigte Rad-STEP bleibt versioniert
+code/*/out/*
+!code/getriebe/out/schneckenrad_mit_trommel_4gang.step
