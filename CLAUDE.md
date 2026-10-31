@@ -5,7 +5,7 @@ Code (CadQuery-Generatoren, Prüfskripte), aktuelle Druckdateien und diese Zusam
 
 ## Zusammenarbeit mit Peter
 
-- Peter ist Theatertechniker (Ausbildung Elektronik) und arbeitet mit Fusion 360, einem **Bambu Lab A1 Mini** (0,4-mm-Düse, Textured PEI Plate), PETG und TPU.
+- Peter ist Theatertechniker (Ausbildung Elektronik) und arbeitet mit Fusion 360, einem **Bambu Lab A1 und A1 Mini** (je nach Verfügbarkeit; 0,4-mm-Düse, Textured PEI Plate), PETG und TPU.
 - **Antworten auf Deutsch.** Begriffe aus Bambu Studio und Fusion 360 müssen die **echten deutschen Menübezeichnungen** sein, nicht selbst übersetzte. Bambu-Studio-Begriffe wurden aus `bbl/i18n/de/BambuStudio_de.po` im Repo `bambulab/BambuStudio` geprüft (siehe `code/bs/po.py`, der Pfad zur .po-Datei steht oben im Skript und muss angepasst werden).
 - Er druckt selbst und meldet Ergebnisse zurück. Alle Konstruktionen sind **gerechnet und am Modell geprüft, aber erst teilweise gedruckt**. Das bei Empfehlungen offen sagen.
 - Er will druckfertige STL-Dateien (richtig ausgerichtet, möglichst ohne Stützen) und STEP-Dateien für Fusion.
@@ -133,7 +133,7 @@ Code: `code/getriebe/`. Generator ist `build4.py` (nutzt `build3.py`, `worm3.py`
   - Qualität → Erweitert: Reihenfolge der Wände (innen/außen, außen/innen).
   - Stärke → Wände → Wandlinien; Fülldichte.
   - Sonstige → Druckbetthaftung → Randtyp.
-  - Profile „0.12mm Fine @BBL A1M“ und „Generic PETG @BBL A1M“ (A1 Mini). Haftung: Segmente stehen nur auf einem schmalen Ring → Randtyp „Nur äußerer Rand“ (Sonstige → Druckbetthaftung).
+  - Profile „0.12mm Fine @BBL A1“ / „@BBL A1M“ (A1 Mini) und „Generic PETG @BBL A1“ / „@BBL A1M“. Haftung: Segmente stehen nur auf einem schmalen Ring. Auf dem A1 Mini lösen sich PETG-Teile trotz großem äußeren Rand nach wenigen Schichten, auf dem A1 deutlich seltener. Nächster Versuch (31.10.): „Vermeiden von Wandüberquerungen“ und „Z-Hop beim Rückzug“ 0,4 mm, „Z-Hop-Typ“ Spirale. Ergebnis offen.
 
 ## Nächste Schritte (Peters Rückmeldung abwarten)
 
