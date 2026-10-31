@@ -133,7 +133,7 @@ Code: `code/getriebe/`. Generator ist `build4.py` (nutzt `build3.py`, `worm3.py`
   - Qualität → Erweitert: Reihenfolge der Wände (innen/außen, außen/innen).
   - Stärke → Wände → Wandlinien; Fülldichte.
   - Sonstige → Druckbetthaftung → Randtyp.
-  - Profile „0.12mm Fine @BBL A1“ / „@BBL A1M“ (A1 Mini) und „Generic PETG @BBL A1“ / „@BBL A1M“. Haftung: Segmente stehen nur auf einem schmalen Ring. Auf dem A1 Mini lösen sich PETG-Teile trotz großem äußeren Rand nach wenigen Schichten, auf dem A1 deutlich seltener. Z-Hop beim Rückzug war schon 0,4 mm. Befund: Der Rand bleibt liegen, das Teil reißt vom Rand ab (Lücke stand auf 0,1). Nächster Versuch: „Lücke zwischen Rand und Objekt“ 0 und Elefantenfußkompensation 0 (sie schrumpft die erste Schicht und vergrößert die Lücke), danach Bund-Unterkante entgraten. Ergebnis offen. Plan B: Opferfuß in tele.py anmodellieren.
+  - Profile „0.12mm Fine @BBL A1“ / „@BBL A1M“ (A1 Mini) und „Generic PETG @BBL A1“ / „@BBL A1M“. Haftung: Segmente stehen nur auf einem schmalen Ring. Auf dem A1 Mini lösen sich PETG-Teile trotz großem äußeren Rand nach wenigen Schichten, auf dem A1 deutlich seltener. Z-Hop beim Rückzug war schon 0,4 mm, Profil „@BBL A1M“ war richtig gewählt. Befund: Der Rand bleibt liegen, das Teil reißt vom Rand ab (Lücke stand auf 0,1). Nächster Versuch: „Lücke zwischen Rand und Objekt“ 0 und Elefantenfußkompensation 0 (sie schrumpft die erste Schicht und vergrößert die Lücke), danach Bund-Unterkante entgraten. Ergebnis offen. Plan B: Opferfuß in tele.py anmodellieren.
 
 ## Nächste Schritte (Peters Rückmeldung abwarten)
 
