@@ -145,7 +145,7 @@ Code: `code/getriebe/`. Generator ist `build4.py` (nutzt `build3.py`, `worm3.py`
 
 ## Teil C: TPU-Nasenprothese (Stand 1.11.2026, in Arbeit)
 
-Code: `code/prothese/anprobe.py` (Scan-STL rein, Anprobe-Schale raus). Der Scan selbst liegt **nicht** im Repo (zeigt Peters Gesicht).
+Code: `code/prothese/anprobe.py` (Scan-STL rein, Anprobe-Schale raus). Die Scandaten, Fotos und Maße liegen in `scan/` (siehe `scan/README.md`). Das Repo darf nicht öffentlich werden, die Daten zeigen Peters Gesicht.
 
 - **Scan:** Scaniverse-STL (Meter, Mesh, 3164 Punkte, etwa 1 mm Kantenlänge). Der erste Scan (PLY) war ein Gaussian-Splat und wird nicht verwendet.
 - **Maßstab geprüft:** Peter misst mit Messschieber Nasenlänge 51 mm (Nasenwurzel bis Spitze) und Nasenbreite 33,9 mm. Der Scan liefert etwa 52 mm (Nasenwurzel ist ein flacher Sattel, der Messpunkt schwankt um einige mm) und 31–33 mm. Maßstab 1,00 stimmt also. Eine frühere Messung mit 45,9 mm war ein Anzeigefehler des Messschiebers.

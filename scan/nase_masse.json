@@ -1,0 +1,39 @@
+{
+  "herkunft": "Scaniverse (iPhone-App), STL vom 2026-11-01, Nase von Peter",
+  "einheit": "mm (Datei nase_scan_mm_zentriert.stl); Originaldatei in Metern",
+  "koordinaten": "X seitlich, Y oben, Z aus dem Gesicht heraus; Ursprung = Mitte der Bounding-Box des zugeschnittenen Scans",
+  "gemessen_von_peter_messschieber_mm": {
+    "nasenlaenge_nasenwurzel_bis_spitze": 51.0,
+    "nasenbreite": 33.9
+  },
+  "aus_scan_mm": {
+    "nasenspitze_XYZ": [
+      -0.0,
+      -19.4,
+      22.5
+    ],
+    "nasenwurzel_tiefster_punkt_Y_Z": [
+      24.4,
+      -6.7
+    ],
+    "strecke_spitze_bis_nasenwurzel_tiefster_punkt": 52.7,
+    "strecke_spitze_bis_punkt_bei_Y18": 46.0,
+    "spitze_steht_vor_nasenwurzel_Z": 29.2,
+    "nasenbreite_max_je_Z_Schwelle": {
+      "Z>=-3": 33.0,
+      "Z>=-1": 31.1,
+      "Z>=1": 29.8,
+      "Z>=3": 28.1
+    },
+    "ausdehnung_scan": [
+      43.7,
+      69.9,
+      45.0
+    ]
+  },
+  "hinweise": [
+    "Die Nasenwurzel ist ein flacher Sattel: Spitze-Nasenwurzel schwankt je nach Messpunkt zwischen etwa 46 und 52 mm.",
+    "Maßstab 1,00 wurde mit Peters Messschieber (51 mm / 33,9 mm) und einer gedruckten PETG-Anprobe bestätigt (passt perfekt).",
+    "Der Scan ist zugeschnitten: seitlich nur etwa 5-7 mm über die Nasenflügel hinaus, oben bis etwa 10 mm über die Nasenwurzel, unten bis zum Nasenfuß (Nasenlöcher sichtbar, Oberlippe fehlt)."
+  ]
+}
