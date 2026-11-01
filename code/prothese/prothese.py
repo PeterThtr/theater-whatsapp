@@ -39,6 +39,9 @@ TASCHE_R = FUSS_R + 0.2
 KANAL_D = 3.9          # für 4-mm-PTFE-Schlauch (leicht untermaßig, TPU hält ihn)
 KANAL_BOGEN = 14.0     # Biegeradius des Kanals (der Schlauch muss das mitmachen: vorher testen!)
 R_FILET = 5.0          # Verrundungsradius der Übergänge (Schließen)
+STUTZEN_R = 4.3        # Außenradius des Schlauchstutzens (Flansch), Wand um den 3,9-mm-Kanal etwa 2,3 mm
+STUTZEN_L = 11.0       # Länge des Stutzens über dem Austritt des Kanals
+STUTZEN_EINBETT = 6.0  # so weit reicht der Stutzen in den Körper hinein
 
 # TPU-Wandstärken
 T_WAND, T_RAND, FL_DICKE = 1.2, 0.5, 2.0
@@ -65,6 +68,26 @@ def kanal_pfad(richtung, z0, radius=None, n=40):
     ext = pts[-1] + np.outer(np.linspace(1, 40, 20), tang)
     start = np.array([[pts[0][0], pts[0][1], z0 + 1.5]])
     return np.vstack([start, pts, ext])
+
+
+def stutzen(punkt, tang, laenge=STUTZEN_L, einbett=STUTZEN_EINBETT, r=STUTZEN_R):
+    """Kurzer Schlauchstutzen: Zylinder entlang der Kanal-Tangente, vorn mit gerundeter Kante."""
+    h = einbett + laenge
+    prof = np.array([[0, 0], [r, 0], [r, h - 1.2], [r - 1.2, h], [0, h]])
+    m = trimesh.creation.revolve(prof, sections=64)
+    m.apply_translation([0, 0, -einbett])
+    T = trimesh.geometry.align_vectors([0, 0, 1], tang)
+    m.apply_transform(T)
+    m.apply_translation(punkt)
+    return m
+
+
+def spiegeln_x(m):
+    r = m.copy()
+    r.apply_transform(trimesh.transformations.reflection_matrix([0, 0, 0], [1, 0, 0]))
+    if r.volume < 0:
+        r.invert()
+    return r
 
 
 def zylinder(r, z0, z1, y=YA, x=0.0, sections=128):
@@ -95,7 +118,7 @@ def verrunden(m, r, pitch=0.6, sigma=1.0, level=0.7):
     return out
 
 
-def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=None):
+def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=None, stutzen_spiegel=True):
     z_platte = Z_PLATTE if z_platte is None else z_platte
     kanal_radius = KANAL_BOGEN if kanal_radius is None else kanal_radius
     filet = R_FILET if filet is None else filet
@@ -121,6 +144,14 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     huelse = trimesh.creation.revolve(prof, sections=128)
     huelse.apply_translation([0, YA, 0])
     teile += [keil, huelse]
+    pfad = kanal_pfad(austritt, z_platte, kanal_radius)
+    if austritt in ('links', 'rechts') and stutzen_spiegel is not None:
+        pe = pfad[40]                                   # Ende des Bogens (n = 40 Punkte, Index 0 ist der Start)
+        tg = pfad[40] - pfad[39]; tg /= np.linalg.norm(tg)
+        st = stutzen(pe, tg)
+        teile.append(st)
+        if stutzen_spiegel:                             # Gegenstutzen auf der anderen Seite (ohne Bohrung): Symmetrie
+            teile.append(spiegeln_x(st))
     ausen = trimesh.boolean.union(teile, engine='manifold')
     if filet > 0:
         weich = verrunden(ausen, filet)
@@ -137,7 +168,6 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     z_tasche1 = z_seg0 + FUSS_BECHER + 0.2
     tasche = zylinder(TASCHE_R, z_tasche0, z_tasche1)
     bohrung = zylinder(BOHRUNG_R, z_tasche1 - 0.5, z_ende + 2)
-    pfad = kanal_pfad(austritt, z_platte, kanal_radius)
     kanal = trimesh.creation.sweep_polygon(Point(0, 0).buffer(KANAL_D / 2, 16), pfad)
     cut = trimesh.boolean.union([nase, tasche, bohrung, kanal] + fraeser, engine='manifold')
     tpu = trimesh.boolean.difference([ausen, cut], engine='manifold')
@@ -184,9 +214,12 @@ def main():
     ap.add_argument('--z-platte', type=float, default=Z_PLATTE, help='Z der Fußplatten-Rückseite (Nasenspitze: 22,5)')
     ap.add_argument('--kanal-radius', type=float, default=KANAL_BOGEN)
     ap.add_argument('--filet', type=float, default=R_FILET, help='Verrundungsradius der Übergänge, 0 = aus')
+    ap.add_argument('--stutzen', choices=['aus', 'einseitig', 'symmetrisch'], default='symmetrisch',
+                    help='Schlauchstutzen am seitlichen Austritt; symmetrisch = Gegenstutzen ohne Bohrung auf der anderen Seite')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    tpu = hauptkoerper(baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet))
+    sp = {'aus': None, 'einseitig': False, 'symmetrisch': True}[a.stutzen]
+    tpu = hauptkoerper(baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet, sp))
     print(f"TPU-Prothese: wasserdicht={tpu.is_watertight}, Volumen={tpu.volume / 1000:.1f} cm³ "
           f"(~{tpu.volume / 1000 * 1.21:.0f} g bei 100 %), Ausdehnung={np.round(tpu.extents, 1)}, Flächen={len(tpu.faces)}")
     r, ueber = lage_huelse_oben(tpu)
