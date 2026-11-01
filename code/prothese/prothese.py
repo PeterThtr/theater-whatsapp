@@ -37,11 +37,14 @@ HUELSE_R = 16.2        # Außenradius der Hülse
 BOHRUNG_R = SEG1_R - 0.25   # Presssitz, 0,5 mm Übermaß im Durchmesser
 TASCHE_R = FUSS_R + 0.2
 KANAL_D = 3.9          # für 4-mm-PTFE-Schlauch (leicht untermaßig, TPU hält ihn)
+KANAL_D_LANG = 4.15    # Kanal-Ø bei langem Kanal im Flügel (Schlauch gleitet, Stutzen/Kleber hält ihn)
 KANAL_BOGEN = 14.0     # Biegeradius des Kanals (der Schlauch muss das mitmachen: vorher testen!)
 R_FILET = 5.0          # Verrundungsradius der Übergänge (Schließen)
 STUTZEN_R = 4.3        # Außenradius des Schlauchstutzens (Flansch), Wand um den 3,9-mm-Kanal etwa 2,3 mm
 STUTZEN_L = 11.0       # Länge des Stutzens über dem Austritt des Kanals
 STUTZEN_EINBETT = 6.0  # so weit reicht der Stutzen in den Körper hinein
+BOSS_R = 4.1           # Außenradius des Schlauchwulstes entlang der Flügel (Wand um den 3,9-mm-Kanal etwa 2,1 mm)
+BOSS_H = 2.0           # Mitte des Kanals über der Außenfläche des Flügels (Flügeldicke 2,0 → Kanalmitte 4,15 über der Haut)
 
 # TPU-Wandstärken
 T_WAND, T_RAND, FL_DICKE = 1.2, 0.5, 2.0
@@ -109,6 +112,81 @@ def kanal_pfad_spitz(scan, z0, richtung, radius=None, psi_end=25.0, d_min=3.9, d
     return pts, h, np.vstack([pts, ext]), dict(psi1=psi1, dist=dist)
 
 
+def kanal_pfad_fluegel(scan, z0, richtung, radius, psi_end, ctx, d_min=3.9, ds=0.5):
+    """Schlauchkanal, der um die Nasenspitze läuft und dann im Flügel bis zum äußeren Rand weiterläuft
+    (Wulst auf der Außenfläche des Flügels, unter dem Schlitz hindurch). Der Schlauch tritt erst am Flügelende aus.
+    Aufbau: S-Kurve um die Spitze (zwei Bögen, Radius R), gerade nach hinten zur Wange, dann ein glatter Spline
+    über die Außenfläche des Flügels bis kurz vor den äußeren Rand.
+    Rückgabe wie kanal_pfad_spitz: (Pfad, Tangente am Ende, Pfad mit Verlängerung für den Fräser, Info)."""
+    from scipy.interpolate import splprep, splev
+    R = KANAL_BOGEN if radius is None else radius
+    sgn = -1.0 if richtung == 'links' else 1.0
+    f = ctx['f']; xb0, xl = ctx['xb0'], ctx['xl']
+
+    def flaechenpunkt(xa, y, hoehe):
+        h = 0.4
+        z = float(f(xa, y))
+        fx = (float(f(xa + h, y)) - float(f(xa - h, y))) / (2 * h)
+        fy = (float(f(xa, y + h)) - float(f(xa, y - h))) / (2 * h)
+        n = np.array([-fx * sgn, -fy, 1.0]); n /= np.linalg.norm(n)     # f ist über |x| definiert
+        return np.array([sgn * xa, y, z]) + hoehe * n
+
+    hc = A.SPIEL + FL_DICKE + BOSS_H                  # Kanalmitte über der Haut-Seite des Flügels
+    steuer = [(xb0 + 5.0, -19.5), (xb0 + 14.0, -20.5), (xl, -21.0), (xl + 8.0, -19.5), (xl + 12.5, -14.0), (xl + 14.5, -8.0)]
+    wing = np.array([flaechenpunkt(xa, y, hc) for xa, y in steuer])
+
+    def s_kurve(psi1, psi_e):
+        pts = [np.array([0.0, YA, z0 + 1.5])]
+        p = np.array([0.0, z0]); psi = 0.0; pts.append(np.array([p[0], YA, p[1]])); step = ds / R
+        while psi < np.radians(psi1) - 1e-9:
+            hh = np.array([sgn * np.sin(psi), -np.cos(psi)]); p = p + hh * ds; psi += step
+            pts.append(np.array([p[0], YA, p[1]]))
+        while psi > np.radians(psi_e) + 1e-9:
+            hh = np.array([sgn * np.sin(psi), -np.cos(psi)]); p = p + hh * ds; psi -= step
+            pts.append(np.array([p[0], YA, p[1]]))
+        return np.array(pts), np.array([sgn * np.sin(psi), 0.0, -np.cos(psi)])
+
+    best = None; log = []
+    for psi_e in (psi_end, psi_end + 7, psi_end + 14, psi_end + 22):
+        for sfac in (0.15, 0.8):
+            for psi1 in np.arange(max(psi_e + 5, 50), 125, 4.0):
+                sk, h = s_kurve(psi1, psi_e)
+                E = sk[-1]
+                # gerader Abschnitt nach hinten, bis der Flügelanfang noch ca. 10 mm entfernt ist
+                L = max((E[2] - wing[0][2] - 10.0) / max(-h[2], 0.2), 0.0)
+                gerade = [E + k * h for k in np.arange(6.0, L + 1e-6, 6.0)]
+                ctrl = np.vstack([sk[::8], [E]] + ([np.array(gerade)] if gerade else []) + [wing])
+                keep = np.r_[True, np.linalg.norm(np.diff(ctrl, axis=0), axis=1) > 1.5]       # doppelte Punkte entfernen
+                ctrl = ctrl[keep]
+                u = np.r_[0, np.cumsum(np.linalg.norm(np.diff(ctrl, axis=0), axis=1))]
+                try:
+                    tck, _ = splprep(ctrl.T, u=u, s=len(ctrl) * sfac, k=3)
+                except Exception as e:
+                    continue
+                uu = np.arange(0, u[-1], ds)
+                pts = np.array(splev(uu, tck)).T
+                d1 = np.array(splev(uu, tck, der=1)).T; d2 = np.array(splev(uu, tck, der=2)).T
+                kappa = np.linalg.norm(np.cross(d1, d2), axis=1) / np.maximum(np.linalg.norm(d1, axis=1) ** 3, 1e-9)
+                rad = 1.0 / max(kappa[2:-2].max(), 1e-9)
+                if rad < R - 0.8:
+                    log.append((round(float(psi_e)), round(float(psi1)), sfac, '-', round(float(rad), 1)))
+                    continue
+                dist = trimesh.proximity.closest_point(scan, pts[2:])[1]
+                mask = np.abs(pts[2:, 0]) < 19.0                # nur dort, wo der Scan die Haut kennt
+                dmin = dist[mask].min() if mask.any() else 99.0
+                log.append((round(float(psi_e)), round(float(psi1)), sfac, round(float(dmin), 1), round(float(rad), 1)))
+                if dmin >= d_min:
+                    best = (psi1, pts, dmin, rad, psi_e); break
+            if best: break
+        if best: break
+    if best is None:
+        raise RuntimeError('kein Kanalpfad durch den Flügel mit genug Wand und Biegeradius gefunden; beste Versuche (psi_end, psi1, s, dmin, Radius): ' + str(sorted(log, key=lambda q: -q[4])[:4]))
+    psi1, pts, dmin, rad, psi_e = best
+    tg = pts[-1] - pts[-4]; tg /= np.linalg.norm(tg)
+    ext = pts[-1] + np.outer(np.linspace(1, 30, 15), tg)
+    return pts, tg, np.vstack([pts, ext]), dict(psi1=psi1, dist=dmin, radius=rad, psi_end_ist=psi_e)
+
+
 def stutzen(punkt, tang, laenge=STUTZEN_L, einbett=STUTZEN_EINBETT, r=STUTZEN_R):
     """Kurzer Schlauchstutzen: Zylinder entlang der Kanal-Tangente, vorn mit gerundeter Kante."""
     h = einbett + laenge
@@ -157,29 +235,46 @@ def verrunden(m, r, pitch=0.6, sigma=1.0, level=0.7):
     return out
 
 
-def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=None, stutzen_spiegel=True, winkel=None):
+def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=None, stutzen_spiegel=True, winkel=None,
+         im_fluegel=False):
     z_platte = Z_PLATTE if z_platte is None else z_platte
     kanal_radius = KANAL_BOGEN if kanal_radius is None else kanal_radius
     filet = R_FILET if filet is None else filet
     A.T_WAND, A.T_RAND, A.FL_DICKE = T_WAND, T_RAND, FL_DICKE
     m = A.lade(scan, skala)
-    pfad_spitz = None
-    if austritt in ('links', 'rechts') and winkel is not None:
+    p = A.waehle_flaechen(m, skala)
+    schale, d, t, (V, F, N, rv) = A.baue_schale(p, skala)
+    seite_k = {'links': -1, 'rechts': +1}.get(austritt)
+    extra = None; fraeser = []; teile = [schale]
+    info = {}; pfad_spitz = None; pfad = None
+    # --- Flügelfläche kennenlernen (für den Kanalpfad im Flügel)
+    ctx = None
+    if seite_k is not None and (winkel is not None or im_fluegel):
+        _, _, ctx = A.baue_fluegel(V, N, rv, seite_k, skala, band, t_wand=T_WAND, fl_dicke=FL_DICKE, schlitz_im_koerper=False)
+    if seite_k is not None and winkel is not None:
         # Fußplatte so weit nach vorn schieben, wie der Kanal mit seiner Wand um die Nasenspitze herum braucht
         for zp in np.arange(z_platte, z_platte + 6.1, 0.5):
             try:
-                pfad_spitz = kanal_pfad_spitz(m, zp, austritt, kanal_radius, winkel)
+                if im_fluegel:
+                    pfad_spitz = kanal_pfad_fluegel(m, zp, austritt, kanal_radius, winkel, ctx)
+                else:
+                    pfad_spitz = kanal_pfad_spitz(m, zp, austritt, kanal_radius, winkel)
                 z_platte = float(zp)
                 break
             except RuntimeError:
                 continue
         if pfad_spitz is None:
             raise RuntimeError('kein Kanalpfad mit genug Wand gefunden, Winkel oder Radius ändern')
-    p = A.waehle_flaechen(m, skala)
-    schale, d, t, (V, F, N, rv) = A.baue_schale(p, skala)
-    teile = [schale]; fraeser = []
+    # --- Zusatzfläche der Flügel unter dem Schlauchwulst
+    if pfad_spitz is not None and im_fluegel:
+        from shapely.geometry import LineString
+        pts_w = pfad_spitz[0]
+        sel = np.abs(pts_w[:, 0]) > 12.0
+        xy = np.c_[np.abs(pts_w[sel, 0]), pts_w[sel, 1]]
+        extra = LineString(xy).buffer(BOSS_R + 1.2, 24)
     for seite in (+1, -1):
-        w, fr = A.baue_fluegel(V, N, rv, seite, skala, band, t_wand=T_WAND, fl_dicke=FL_DICKE, schlitz_im_koerper=False)
+        w, fr, _ = A.baue_fluegel(V, N, rv, seite, skala, band, t_wand=T_WAND, fl_dicke=FL_DICKE,
+                                  schlitz_im_koerper=False, extra_poly=extra)
         teile.append(w); fraeser.append(fr)
     # Keil: konvexe Hülle von Spitzenbereich der Schale und dem Hülsenanfang
     sv = schale.vertices
@@ -195,13 +290,12 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     huelse = trimesh.creation.revolve(prof, sections=128)
     huelse.apply_translation([0, YA, 0])
     teile += [keil, huelse]
-    info = {}
     if pfad_spitz is not None:
         pts, tg, pfad, info = pfad_spitz
         info['z_platte'] = z_platte
-        # Wulst um den Kanal (Außenradius wie der Stutzen), läuft mit der Wand fließend mit; Stutzen am Ende
-        boss = trimesh.creation.sweep_polygon(Point(0, 0).buffer(STUTZEN_R, 24), pts[1:])
-        st = stutzen(pts[-1], tg, laenge=STUTZEN_L - 3, einbett=4.0)
+        r_boss = BOSS_R if im_fluegel else STUTZEN_R
+        boss = trimesh.creation.sweep_polygon(Point(0, 0).buffer(r_boss, 24), pts[1:])
+        st = stutzen(pts[-1], tg, laenge=STUTZEN_L - 3, einbett=4.0, r=r_boss)
         teile += [boss, st]
         if stutzen_spiegel:                             # Gegenstück auf der anderen Seite (ohne Bohrung): Symmetrie
             teile += [spiegeln_x(boss), spiegeln_x(st)]
@@ -230,7 +324,8 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     z_tasche1 = z_seg0 + FUSS_BECHER + 0.2
     tasche = zylinder(TASCHE_R, z_tasche0, z_tasche1)
     bohrung = zylinder(BOHRUNG_R, z_tasche1 - 0.5, z_ende + 2)
-    kanal = trimesh.creation.sweep_polygon(Point(0, 0).buffer(KANAL_D / 2, 16), pfad)
+    kd = KANAL_D_LANG if im_fluegel else KANAL_D       # der lange Kanal im Flügel braucht Luft zum Einschieben
+    kanal = trimesh.creation.sweep_polygon(Point(0, 0).buffer(kd / 2, 16), pfad)
     cut = trimesh.boolean.union([nase, tasche, bohrung, kanal] + fraeser, engine='manifold')
     tpu = trimesh.boolean.difference([ausen, cut], engine='manifold')
     return tpu, info
@@ -278,12 +373,13 @@ def main():
     ap.add_argument('--filet', type=float, default=R_FILET, help='Verrundungsradius der Übergänge, 0 = aus')
     ap.add_argument('--stutzen', choices=['aus', 'einseitig', 'symmetrisch'], default='symmetrisch',
                     help='Schlauchstutzen am seitlichen Austritt; symmetrisch = Gegenstutzen ohne Bohrung auf der anderen Seite')
+    ap.add_argument('--im-fluegel', action='store_true', help='Schlauchkanal läuft im Flügel bis zum äußeren Rand (nur mit --winkel und seitlichem Austritt)')
     ap.add_argument('--winkel', type=float, default=None, help='Stutzen-Winkel zur -Z-Achse in Grad bei seitlichem Austritt (z. B. 25 = spitz zur Wange); ohne Angabe: quer')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     sp = {'aus': None, 'einseitig': False, 'symmetrisch': True}[a.stutzen]
-    roh, info = baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet, sp, a.winkel)
-    if info: print(f"Kanal: erster Bogen {info['psi1']:.0f}°, Abstand Kanalmitte–Haut {info['dist']:.1f} mm, Fußplatte bei Z {info['z_platte']:.1f}")
+    roh, info = baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet, sp, a.winkel, a.im_fluegel)
+    if info: print(f"Kanal: erster Bogen {info['psi1']:.0f}°, Abstand Kanalmitte–Haut {info['dist']:.1f} mm, Fußplatte bei Z {info['z_platte']:.1f}" + (f", kleinster Radius {info['radius']:.1f} mm" if 'radius' in info else ''))
     tpu = hauptkoerper(roh)
     print(f"TPU-Prothese: wasserdicht={tpu.is_watertight}, Volumen={tpu.volume / 1000:.1f} cm³ "
           f"(~{tpu.volume / 1000 * 1.21:.0f} g bei 100 %), Ausdehnung={np.round(tpu.extents, 1)}, Flächen={len(tpu.faces)}")

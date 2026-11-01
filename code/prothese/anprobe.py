@@ -42,6 +42,7 @@ R_WANGE = 90.0        # Krümmungsradius der Wölbung in Y über dem Wangenknoch
 LAPPEN_MITTE = 24.0    # Abstand der Lappenmitte vom Schalenrand (mm)
 LAPPEN_A = 15.0        # Halbachse des Lappens in X
 LAPPEN_B = 21.0        # Halbachse des Lappens in Y (Höhe 42 mm)
+SCHLITZ_DY = 4.0       # Schlitz liegt um so viel höher als die Flügelmitte (unten bleibt Platz für den Schlauchwulst)
 R_KOPF = 75.0          # angenommener Krümmungsradius der Kopfseite (Flügel biegen sich nach hinten)
 
 
@@ -151,14 +152,15 @@ def baue_schale(p, skala):
     return s, d, t, (V, F, N, rv)
 
 
-def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, schlitz_im_koerper=True):
+def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, schlitz_im_koerper=True, extra_poly=None):
     """Flügel als 2,5D-Fläche über dem Umriss (X, Y): innen die Scanfläche, außen eine gerundete Fortsetzung
     (Steigung am Schalenrand, nach hinten zunehmend gekrümmt wie die Wange, Radius R_KOPF, dazu eine Wölbung
     in Y wie über dem Wangenknochen). Der Umriss ist ein Lappen: schmal an der Nase, außen breit und rund.
 
     schlitz_im_koerper=True: der Schlitz für das Gummiband ist ein Loch im Körper. Sonst wird der Körper ohne
     Schlitz erzeugt (zum Glätten) und der Schlitz als Fräskörper zurückgegeben.
-    Rückgabe: (Körper, Fräskörper oder None)"""
+    extra_poly: zusätzliche Fläche (Shapely, Koordinaten mit positivem X), die zum Umriss gehört (z. B. unter dem Schlauchwulst).
+    Rückgabe: (Körper, Fräskörper oder None, Kontext mit f(|x|, y) für die Flügelfläche)"""
     from shapely.geometry import box, Polygon, LineString, Point
     from shapely import affinity
     from shapely.ops import unary_union
@@ -212,9 +214,12 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, sch
     wurzel = box(x_in, yc - H0 / 2, xb(yc) + 2 * skala, yc + H0 / 2)
     ell = affinity.scale(Point(xl, yc).buffer(1, 96), xfact=LAPPEN_A * skala, yfact=LAPPEN_B * skala)
     ur = unary_union([wurzel, ell]).convex_hull
+    if extra_poly is not None:
+        ur = unary_union([ur, extra_poly])
     ur = ur.buffer(-3 * skala).buffer(3 * skala)
     sl_h, sl_b = SCHLITZ_H, band_b + 1.0
-    schlitz = box(xl - sl_h / 2, yc - sl_b / 2, xl + sl_h / 2, yc + sl_b / 2).buffer(-1.2).buffer(1.2)
+    ys = yc + SCHLITZ_DY * skala
+    schlitz = box(xl - sl_h / 2, ys - sl_b / 2, xl + sl_h / 2, ys + sl_b / 2).buffer(-1.2).buffer(1.2)
     poly = ur.difference(schlitz) if schlitz_im_koerper else ur
     if seite < 0:
         poly = affinity.scale(poly, xfact=-1, yfact=1, origin=(0, 0))
@@ -235,17 +240,18 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, sch
     fraeser = None
     if not schlitz_im_koerper:
         xs = -xl if seite < 0 else xl
-        zs = float(f(xs, yc)); h = 0.4
-        n = np.array([-(f(xs + h, yc) - f(xs - h, yc)) / (2 * h), -(f(xs, yc + h) - f(xs, yc - h)) / (2 * h), 1.0])
+        zs = float(f(xs, ys)); h = 0.4
+        n = np.array([-(f(xs + h, ys) - f(xs - h, ys)) / (2 * h), -(f(xs, ys + h) - f(xs, ys - h)) / (2 * h), 1.0])
         n /= np.linalg.norm(n)
         ey = np.array([0.0, 1.0, 0.0]) - n[1] * n; ey /= np.linalg.norm(ey)
         ex = np.cross(ey, n)
         pf = box(-sl_h / 2, -sl_b / 2, sl_h / 2, sl_b / 2).buffer(-1.2).buffer(1.2)
         fraeser = trimesh.creation.extrude_polygon(pf, 12.0)
         fraeser.apply_translation([0, 0, -6.0])
-        T = np.eye(4); T[:3, 0] = ex; T[:3, 1] = ey; T[:3, 2] = n; T[:3, 3] = [xs, yc, zs]
+        T = np.eye(4); T[:3, 0] = ex; T[:3, 1] = ey; T[:3, 2] = n; T[:3, 3] = [xs, ys, zs]
         fraeser.apply_transform(T)
-    return koerper, fraeser
+    ctx = dict(f=lambda xa, y: f(seite * np.asarray(xa, float), y), xb0=xb(yc), xl=xl, yc=yc, ys=ys, sl_b=sl_b, sl_h=sl_h, seite=seite)
+    return koerper, fraeser, ctx
 
 
 def druckrichtung(s):
@@ -283,7 +289,7 @@ def main():
     if a.fluegel:
         name = 'anprobe_fluegel'
         for seite in (+1, -1):
-            f, _ = baue_fluegel(V, N, rv, seite, a.scale, a.band)
+            f, _, _ = baue_fluegel(V, N, rv, seite, a.scale, a.band)
             print(f"Flügel {seite:+d}: wasserdicht={f.is_watertight}, Volumen={f.volume / 1000:.2f} cm³, Ausdehnung={np.round(f.extents, 1)}")
             teile.append(f)
         s = trimesh.boolean.union(teile, engine='manifold')
