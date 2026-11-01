@@ -38,6 +38,10 @@ FL_UEBERLAPP = 4.0     # der Flügel beginnt so weit innerhalb der Schale (damit
 SCHLITZ_H = 3.5        # Schlitzhöhe in Bandrichtung (Band + Falte)
 SCHLITZ_U = 20.0       # Abstand der Schlitzmitte vom Schalenrand
 WANGE_STEIGUNG = -0.4  # mittlere Steigung der Wange seitlich der Nase (mm Z je mm X)
+R_WANGE = 90.0        # Krümmungsradius der Wölbung in Y über dem Wangenknochen
+LAPPEN_MITTE = 24.0    # Abstand der Lappenmitte vom Schalenrand (mm)
+LAPPEN_A = 15.0        # Halbachse des Lappens in X
+LAPPEN_B = 21.0        # Halbachse des Lappens in Y (Höhe 42 mm)
 R_KOPF = 75.0          # angenommener Krümmungsradius der Kopfseite (Flügel biegen sich nach hinten)
 
 
@@ -49,13 +53,15 @@ def lade(pfad, skala):
     return m
 
 
-def waehle_flaechen(m, skala):
+def waehle_flaechen(m, skala, outline=None, unten_frei=True):
+    """Wählt die Scanflächen innerhalb des Umrisses. unten_frei=True lässt die Unterseite der Spitze und die
+    Nasenlöcher weg (für die Schale); False nimmt alles (für den Nasenkörper, der abgezogen wird)."""
     c = m.triangles_center
     n = m.face_normals
-    poly = Path(np.array(OUTLINE, float) * skala)
+    poly = Path(np.array(OUTLINE if outline is None else outline, float) * skala)
     sel = poly.contains_points(c[:, :2])
     # Unterseite der Spitze / Nasenlöcher: nur der größte zusammenhängende Bereich wird entfernt
-    u = np.where(sel & (c[:, 1] < UNTEN_Y * skala) & (n[:, 1] < UNTEN_NY))[0]
+    u = np.where(sel & (c[:, 1] < UNTEN_Y * skala) & (n[:, 1] < UNTEN_NY))[0] if unten_frei else []
     if len(u):
         adj = m.face_adjacency
         keep = np.isin(adj[:, 0], u) & np.isin(adj[:, 1], u)
@@ -145,16 +151,21 @@ def baue_schale(p, skala):
     return s, d, t, (V, F, N, rv)
 
 
-def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None):
+def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, schlitz_im_koerper=True):
     """Flügel als 2,5D-Fläche über dem Umriss (X, Y): innen die Scanfläche, außen eine gerundete Fortsetzung
-    (Steigung am Schalenrand, nach hinten zunehmend gekrümmt wie die Wange, Radius R_KOPF).
-    Der Umriss hat einen Schlitz für das Gummiband. Wird um die Schale herum verschmolzen."""
+    (Steigung am Schalenrand, nach hinten zunehmend gekrümmt wie die Wange, Radius R_KOPF, dazu eine Wölbung
+    in Y wie über dem Wangenknochen). Der Umriss ist ein Lappen: schmal an der Nase, außen breit und rund.
+
+    schlitz_im_koerper=True: der Schlitz für das Gummiband ist ein Loch im Körper. Sonst wird der Körper ohne
+    Schlitz erzeugt (zum Glätten) und der Schlitz als Fräskörper zurückgegeben.
+    Rückgabe: (Körper, Fräskörper oder None)"""
     from shapely.geometry import box, Polygon, LineString, Point
+    from shapely import affinity
+    from shapely.ops import unary_union
     from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
     t_wand = T_WAND if t_wand is None else t_wand
     fl_dicke = FL_DICKE if fl_dicke is None else fl_dicke
-    H = band_b + 7.0
-    L = FL_LAENGE * skala
+    H0 = band_b + 7.0                       # Höhe an der Wurzel
     yc = FL_Y * skala
     foot = Polygon(np.array(OUTLINE, float) * skala)
     lin = LinearNDInterpolator(V[:, :2], V[:, 2]); nea = NearestNDInterpolator(V[:, :2], V[:, 2])
@@ -174,7 +185,7 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None):
 
     # Randwerte entlang Y vorab bestimmen und glätten (der Scanrand ist unruhig, das soll nicht in den Flügel wandern)
     from scipy.ndimage import gaussian_filter1d
-    yg = np.arange(yc - H / 2 - 6, yc + H / 2 + 6.01, 0.5)
+    yg = np.arange(yc - LAPPEN_B - 8, yc + LAPPEN_B + 8.01, 0.5)
     x0g = np.array([xb(v) - 1.5 for v in yg])
     fbg = np.array([float(f_scan(seite * x0, v)) for x0, v in zip(x0g, yg)])
     f2g = np.array([float(f_scan(seite * (x0 - 3.0), v)) for x0, v in zip(x0g, yg)])
@@ -190,21 +201,22 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None):
         xi = np.maximum(a - x0, 0.0)
         fb = np.interp(yy, yg, fbg); sl = np.interp(yy, yg, slg)
         ext = fb + WANGE_STEIGUNG * xi + (sl - WANGE_STEIGUNG) * 6.0 * (1 - np.exp(-xi / 6.0)) - 0.5 * xi * xi / R_KOPF
-        inside = np.where(a <= x0, f_scan(xx, yy), ext)
-        return inside
+        # Wölbung in Y (Wangenknochen): oben und unten fällt die Fläche nach hinten ab, außen stärker als innen
+        ramp = np.clip(xi / 14.0, 0, 1); ramp = ramp * ramp * (3 - 2 * ramp)
+        ext = ext - 0.5 * (yy - yc) ** 2 / R_WANGE * ramp
+        return np.where(a <= x0, f_scan(xx, yy), ext)
 
-    x_in = xb(yc + H / 2) - 6 * skala
-    x_out = xb(yc) + L
-    r = 7.0 * skala
-    ur = box(0, yc - H / 2, x_out, yc + H / 2)
-    ur = ur.buffer(-r).buffer(r).union(box(0, yc - H / 2, x_in + 8, yc + H / 2))
-    ur = ur.intersection(box(x_in, yc - H / 2, x_out, yc + H / 2))
-    xs = xb(yc) + SCHLITZ_U * skala
+    # Umriss: Wurzel (Rechteck, reicht in die Schale hinein) und ein Ellipsen-Lappen, dazwischen die konvexe Hülle
+    x_in = xb(yc + H0 / 2) - 6 * skala
+    xl = xb(yc) + LAPPEN_MITTE * skala
+    wurzel = box(x_in, yc - H0 / 2, xb(yc) + 2 * skala, yc + H0 / 2)
+    ell = affinity.scale(Point(xl, yc).buffer(1, 96), xfact=LAPPEN_A * skala, yfact=LAPPEN_B * skala)
+    ur = unary_union([wurzel, ell]).convex_hull
+    ur = ur.buffer(-3 * skala).buffer(3 * skala)
     sl_h, sl_b = SCHLITZ_H, band_b + 1.0
-    schlitz = box(xs - sl_h / 2, yc - sl_b / 2, xs + sl_h / 2, yc + sl_b / 2).buffer(-1.2).buffer(1.2)
-    poly = ur.difference(schlitz)
+    schlitz = box(xl - sl_h / 2, yc - sl_b / 2, xl + sl_h / 2, yc + sl_b / 2).buffer(-1.2).buffer(1.2)
+    poly = ur.difference(schlitz) if schlitz_im_koerper else ur
     if seite < 0:
-        from shapely import affinity
         poly = affinity.scale(poly, xfact=-1, yfact=1, origin=(0, 0))
     v2, f2 = trimesh.creation.triangulate_polygon(poly, triangle_args='pq28a2.0', engine='triangle')
     x, y = v2[:, 0], v2[:, 1]
@@ -213,9 +225,27 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None):
     gx = (f(x + h, y) - f(x - h, y)) / (2 * h); gy = (f(x, y + h) - f(x, y - h)) / (2 * h)
     N3 = np.stack([-gx, -gy, np.ones_like(gx)], 1); N3 /= np.linalg.norm(N3, axis=1, keepdims=True)
     V3 = np.stack([x, y, z], 1)
-    d = np.array([foot.exterior.distance(Point(px, py)) if not foot.contains(Point(px, py)) else 0.0 for px, py in zip(x, y)])
-    t = t_wand + (fl_dicke - t_wand) * np.clip(d / (8.0 * skala), 0, 1)
-    return verdicke(V3, f2, N3, t)
+    bnd = poly.boundary
+    d_fuss = np.array([foot.exterior.distance(Point(px, py)) if not foot.contains(Point(px, py)) else 0.0 for px, py in zip(x, y)])
+    d_rand = np.array([bnd.distance(Point(px, py)) for px, py in zip(x, y)])
+    t = t_wand + (fl_dicke - t_wand) * np.clip(d_fuss / (8.0 * skala), 0, 1)
+    t = t * (0.55 + 0.45 * np.clip(d_rand / 6.0, 0, 1))          # Rand läuft dünner aus
+    t = np.maximum(t, 0.6)
+    koerper = verdicke(V3, f2, N3, t)
+    fraeser = None
+    if not schlitz_im_koerper:
+        xs = -xl if seite < 0 else xl
+        zs = float(f(xs, yc)); h = 0.4
+        n = np.array([-(f(xs + h, yc) - f(xs - h, yc)) / (2 * h), -(f(xs, yc + h) - f(xs, yc - h)) / (2 * h), 1.0])
+        n /= np.linalg.norm(n)
+        ey = np.array([0.0, 1.0, 0.0]) - n[1] * n; ey /= np.linalg.norm(ey)
+        ex = np.cross(ey, n)
+        pf = box(-sl_h / 2, -sl_b / 2, sl_h / 2, sl_b / 2).buffer(-1.2).buffer(1.2)
+        fraeser = trimesh.creation.extrude_polygon(pf, 12.0)
+        fraeser.apply_translation([0, 0, -6.0])
+        T = np.eye(4); T[:3, 0] = ex; T[:3, 1] = ey; T[:3, 2] = n; T[:3, 3] = [xs, yc, zs]
+        fraeser.apply_transform(T)
+    return koerper, fraeser
 
 
 def druckrichtung(s):
@@ -253,7 +283,7 @@ def main():
     if a.fluegel:
         name = 'anprobe_fluegel'
         for seite in (+1, -1):
-            f = baue_fluegel(V, N, rv, seite, a.scale, a.band)
+            f, _ = baue_fluegel(V, N, rv, seite, a.scale, a.band)
             print(f"Flügel {seite:+d}: wasserdicht={f.is_watertight}, Volumen={f.volume / 1000:.2f} cm³, Ausdehnung={np.round(f.extents, 1)}")
             teile.append(f)
         s = trimesh.boolean.union(teile, engine='manifold')
