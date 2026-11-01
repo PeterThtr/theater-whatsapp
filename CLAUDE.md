@@ -145,15 +145,25 @@ Code: `code/getriebe/`. Generator ist `build4.py` (nutzt `build3.py`, `worm3.py`
 
 ## Teil C: TPU-Nasenprothese (Stand 1.11.2026, in Arbeit)
 
-Code: `code/prothese/anprobe.py` (Scan-STL rein, Anprobe-Schale raus). Die Scandaten, Fotos und Maße liegen in `scan/` (siehe `scan/README.md`). Das Repo darf nicht öffentlich werden, die Daten zeigen Peters Gesicht.
+Code: `code/prothese/anprobe.py` (Scan-STL rein, Anprobe-Schale, mit `--fluegel` auch Flügel mit Bandschlitz) und `code/prothese/prothese.py` (komplette TPU-Prothese). Die Scandaten, Fotos und Maße liegen in `scan/` (siehe `scan/README.md`). Das Repo darf nicht öffentlich werden, die Daten zeigen Peters Gesicht.
 
 - **Scan:** Scaniverse-STL (Meter, Mesh, 3164 Punkte, etwa 1 mm Kantenlänge). Der erste Scan (PLY) war ein Gaussian-Splat und wird nicht verwendet.
 - **Maßstab geprüft:** Peter misst mit Messschieber Nasenlänge 51 mm (Nasenwurzel bis Spitze) und Nasenbreite 33,9 mm. Der Scan liefert etwa 52 mm (Nasenwurzel ist ein flacher Sattel, der Messpunkt schwankt um einige mm) und 31–33 mm. Maßstab 1,00 stimmt also. Eine frühere Messung mit 45,9 mm war ein Anzeigefehler des Messschiebers.
 - **Entscheidungen von Peter:** Das Teleskop zeigt waagerecht vom Gesicht weg. Rund um die Nase soll eine breite Auflagefläche für Hautkleber sein.
 - **Grenze des Scans:** Er reicht seitlich nur etwa 5–7 mm über die Nasenflügel hinaus und nach oben etwa 10 mm. Für eine breitere Auflage braucht es einen größeren Scanbereich (beide Wangen, Stirn bis Oberlippe).
 - **Anprobe-Schale:** 0,8 mm Wand, zum Rand hin 0,4 mm auslaufend, 0,15 mm Spiel zur Haut, Nasenlöcher frei. Gedruckt wird sie stehend auf der unteren Kante mit Rand (Randtyp „Äußerer Rand“, 5–8 mm), praktisch ohne Stützen. **Gedruckt in PETG (1.11.): passt perfekt und liegt überall an, Maßstab 1,00 bestätigt. Ohne Kleber hält sie nur knapp und fällt bei Bewegung ab (starres PETG, noch kein Hautkleber getestet).**
-- **Konzept Hülse (1.11., nur Skizze, nichts gebaut):** Die TPU-Prothese umschließt Segment 1 etwa 45 mm weit (frei bleiben etwa 18,5 mm). Der Nasenrücken geht ohne Knick in eine waagerechte Hülse über (Außen-Ø etwa 32, innen etwa 27,4). Achshöhe = Höhe der Nasenspitze. Der Fuß wird rund (ohne Flügel) und sitzt in einer Tasche; Segment 1 bekommt 2 Haltenuten (etwa 0,6 mm tief), in die TPU-Rippen einrasten. Schlauch und Schnur verlassen die Prothese unten an der Spitze. Offen: Das Einschieben von vorn dehnt die Tasche am Fußbecher (Ø 29,8) um etwa 2,4 mm auf. Die Anprobe-Schale passt (1.11.), das Konzept ist damit freigegeben, aber noch nicht gebaut.
-- **Offen:** Anprobe auswerten (Sitz, Nasenlöcher frei, Auflage). Danach den waagerechten Sockel für den Fuß ergänzen. Wie der Fuß im TPU sitzt (Flügel einbetten mit Druckpause oder Einrasttasche), ist noch nicht entschieden. Die Flügel (±24 mm) sind breiter als die Nase (etwa 34 mm) und müssten für den Sockel gekürzt werden.
+- **TPU-Prothese V1 (1.11., gerechnet, nicht gedruckt):** `code/prothese/prothese.py` (baut auf `anprobe.py` auf), Ergebnis `teile/aktuell/prothese/prothese_tpu.stl` (druckfertige Lage, Hülse nach oben) und `prothese_tpu_lage_scan.stl` (Lage wie im Scan). Aufruf: `python3 code/prothese/prothese.py scan/nase_scaniverse_original_m.stl --out out/ [--band 20] [--austritt unten|links|rechts]`.
+  - **Aufbau (ein Körper, 39,8 cm³, 110 × 65 × 144 mm):**
+    - Schale auf der Haut: 1,2 mm Wand, zum Rand 0,5 mm, 0,15 mm Spiel zur Haut, Nasenlöcher frei.
+    - Zwei Flügel (je etwa 34 mm über den Schalenrand hinaus, Gesamtbreite 110 mm, 2 mm dick) mit Schlitz 21 × 3,5 mm für ein 20 mm breites flaches Gummiband, Mitte etwa 20 mm vom Schalenrand. Die Form der Wange seitlich der Nase ist **geschätzt** (Steigung −0,4, Radius 75), der Scan reicht dort nicht.
+    - Keil (konvexe Hülle) von der Nasenspitze zur Hülse, Hülse Außen-Ø 32,4 mit 45 mm Länge um Segment 1, davon 18,5 mm frei.
+    - Teleskopachse waagerecht auf Höhe der Nasenspitze (Y −19). Fußplatte-Rückseite bei Z 46, also etwa 23 mm vor der Nasenspitze (Platz für den Kanalbogen).
+    - Bohrung für Segment 1 Ø 27,1 (0,5 mm Übermaß = Presssitz, TPU dehnt sich). Fußtasche Ø 30,2 für den runden Fuß (Ø 29,8, Platte + Becher), eine Schulter hält ihn in beide Richtungen.
+    - Kanal Ø 3,9 für den 4-mm-PTFE-Schlauch, Biegeradius 20 mm, Austritt unten vorn bei Y −29, Z 28 (Richtung nach unten/hinten), 9 mm von der Haut entfernt.
+  - **Geprüft am Modell:** wasserdicht, ein Körper; der Spalt zur Haut ist frei, die Wand überall geschlossen; Bohrung, Tasche und Kanal sind frei (kein TPU im Teleskopraum).
+  - **Nicht geprüft / offen:** nie gedruckt. Der Fuß muss von vorn durch die Bohrung (Dehnung etwa 10 %), mit Seifenwasser. Segment 1 hat noch **keine Haltenuten**, es hält über den Presssitz. Der Kanal ist für den 4-mm-Schlauch gedacht (Draht-Variante, Teil D). Für die Schnur-Variante mit 2-mm-Schlauch ist er zu weit. Die Flügelform ist geraten. Das Gewicht ist hoch (etwa 40–48 g bei 100 %, die meiste Masse ist Wand, nicht Füllung).
+  - **Druck:** Lage Hülse nach oben, Höhe 144 mm, Überhang (Neigung < 30°) etwa 3,6 cm². Die Flügel stehen nur mit ihren Kanten auf der Platte (Rand „Äußerer Rand“ nötig). Ob Stützen nötig sind, zeigt die Vorschau in Bambu Studio.
+- **Offen:** Anprobe mit Flügeln und Band (PETG) wäre sinnvoll, bevor in TPU gedruckt wird. Haltenuten und Segment-1-Anpassung, Antrieb und Anbindung des Drahts (Teil D).
 
 ## Teil D: Drahtvariante statt Feder (Idee, Stand 1.11.2026, nichts gebaut)
 
@@ -168,4 +178,4 @@ Code: `code/prothese/anprobe.py` (Scan-STL rein, Anprobe-Schale raus). Die Scand
 1. Passprobe Teleskop: Sitz des Spiels 0,15. Bei Bedarf `S` in `tele.py` ändern, neu exportieren und `verify.py` laufen lassen.
 2. Teleskop V2 komplett drucken und montieren: Durchhang, Stick-Slip, Federführung.
 3. Winde mit den winde4-Teilen: Lagersitz, Halt der eingeklebten Welle, Bremse.
-4. TPU-Prothese: Anprobe-Schale drucken und auswerten (siehe Teil C).
+4. TPU-Prothese V1 drucken oder vorher die Anprobe mit Flügeln in PETG testen (siehe Teil C).

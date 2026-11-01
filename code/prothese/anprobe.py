@@ -37,6 +37,7 @@ FL_DICKE = 1.6         # Dicke des Flügels
 FL_UEBERLAPP = 4.0     # der Flügel beginnt so weit innerhalb der Schale (damit beide verschmelzen)
 SCHLITZ_H = 3.5        # Schlitzhöhe in Bandrichtung (Band + Falte)
 SCHLITZ_U = 20.0       # Abstand der Schlitzmitte vom Schalenrand
+WANGE_STEIGUNG = -0.4  # mittlere Steigung der Wange seitlich der Nase (mm Z je mm X)
 R_KOPF = 75.0          # angenommener Krümmungsradius der Kopfseite (Flügel biegen sich nach hinten)
 
 
@@ -144,58 +145,76 @@ def baue_schale(p, skala):
     return s, d, t, (V, F, N, rv)
 
 
-def rot_y(v, phi):
-    c, s_ = np.cos(phi), np.sin(phi)
-    out = v.copy()
-    out[..., 0] = v[..., 0] * c + v[..., 2] * s_
-    out[..., 2] = -v[..., 0] * s_ + v[..., 2] * c
-    return out
-
-
-def baue_fluegel(V, N, rv, seite, skala, band_b):
-    """Flügel an der Seite (+1 rechts, -1 links): Streifen, der tangential vom Schalenrand weiterläuft und sich
-    nach hinten biegt, mit Schlitz für das Gummiband."""
-    from shapely.geometry import box, Polygon
-    from scipy.interpolate import RegularGridInterpolator
+def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None):
+    """Flügel als 2,5D-Fläche über dem Umriss (X, Y): innen die Scanfläche, außen eine gerundete Fortsetzung
+    (Steigung am Schalenrand, nach hinten zunehmend gekrümmt wie die Wange, Radius R_KOPF).
+    Der Umriss hat einen Schlitz für das Gummiband. Wird um die Schale herum verschmolzen."""
+    from shapely.geometry import box, Polygon, LineString, Point
+    from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
+    t_wand = T_WAND if t_wand is None else t_wand
+    fl_dicke = FL_DICKE if fl_dicke is None else fl_dicke
     H = band_b + 7.0
     L = FL_LAENGE * skala
-    ov = FL_UEBERLAPP * skala
     yc = FL_Y * skala
-    sel = [i for i in rv if V[i, 0] * seite > 10 * skala and abs(V[i, 1] - yc) < H / 2 + 4]
-    sel = sorted(sel, key=lambda i: V[i, 1])
-    ys = V[sel, 1]
-    vg = np.arange(-H / 2, H / 2 + 1e-6, 1.0)
-    B = np.stack([np.interp(yc + vg, ys, V[sel, k]) for k in range(3)], 1)
-    n0 = np.stack([np.interp(yc + vg, ys, N[sel, k]) for k in range(3)], 1)
-    n0 /= np.linalg.norm(n0, axis=1, keepdims=True)
-    e = np.array([seite, 0.0, 0.0])
-    d0 = e - (n0 @ e)[:, None] * n0
-    d0 /= np.linalg.norm(d0, axis=1, keepdims=True)
-    ds = 0.25
-    ug = np.arange(-ov, L + ds / 2, ds)
-    phi = np.where(ug > 0, seite * ug / R_KOPF, 0.0)
-    P = np.zeros((len(ug), len(vg), 3)); NN = np.zeros_like(P)
-    for j in range(len(vg)):
-        D = rot_y(np.tile(d0[j], (len(ug), 1)), phi)
-        step = np.where(ug > 0, ds, 0.0)[:, None] * D
-        pos = np.cumsum(step, 0)
-        pos = np.where((ug <= 0)[:, None], ug[:, None] * d0[j], pos)
-        P[:, j] = B[j] + pos
-        NN[:, j] = rot_y(np.tile(n0[j], (len(ug), 1)), phi)
-    # Umriss in (u, v): Rechteck mit gerundeten Außenecken, Schlitz mit gerundeten Ecken
+    foot = Polygon(np.array(OUTLINE, float) * skala)
+    lin = LinearNDInterpolator(V[:, :2], V[:, 2]); nea = NearestNDInterpolator(V[:, :2], V[:, 2])
+
+    def f_scan(x, y):
+        z = lin(x, y)
+        return np.where(np.isnan(z), nea(x, y), z)
+
+    cache = {}
+
+    def xb(y):
+        k = round(float(y) * 4) / 4
+        if k not in cache:
+            seg = LineString([(0, k), (seite * 200, k)]).intersection(foot)
+            cache[k] = abs(seg.bounds[0] if seite < 0 else seg.bounds[2]) if not seg.is_empty else 15.0 * skala
+        return cache[k]
+
+    # Randwerte entlang Y vorab bestimmen und glätten (der Scanrand ist unruhig, das soll nicht in den Flügel wandern)
+    from scipy.ndimage import gaussian_filter1d
+    yg = np.arange(yc - H / 2 - 6, yc + H / 2 + 6.01, 0.5)
+    x0g = np.array([xb(v) - 1.5 for v in yg])
+    fbg = np.array([float(f_scan(seite * x0, v)) for x0, v in zip(x0g, yg)])
+    f2g = np.array([float(f_scan(seite * (x0 - 3.0), v)) for x0, v in zip(x0g, yg)])
+    slg = np.clip((fbg - f2g) / 3.0, -1.6, 0.5)
+    sig = 3.0 / 0.5
+    x0g, fbg, slg = (gaussian_filter1d(q, sig, mode='nearest') for q in (x0g, fbg, slg))
+
+    def f(x, y):
+        x = np.asarray(x, float); y = np.asarray(y, float)
+        xx, yy = np.broadcast_arrays(x, y)
+        a = np.abs(xx)
+        x0 = np.interp(yy, yg, x0g)
+        xi = np.maximum(a - x0, 0.0)
+        fb = np.interp(yy, yg, fbg); sl = np.interp(yy, yg, slg)
+        ext = fb + WANGE_STEIGUNG * xi + (sl - WANGE_STEIGUNG) * 6.0 * (1 - np.exp(-xi / 6.0)) - 0.5 * xi * xi / R_KOPF
+        inside = np.where(a <= x0, f_scan(xx, yy), ext)
+        return inside
+
+    x_in = xb(yc + H / 2) - 6 * skala
+    x_out = xb(yc) + L
     r = 7.0 * skala
-    aussen = box(-ov, -H / 2, L, H / 2).buffer(-r).buffer(r).union(box(-ov, -H / 2, 4.0, H / 2))
-    us, sh, sb = SCHLITZ_U * skala, SCHLITZ_H, band_b + 1.0
-    schlitz = box(us - sh / 2, -sb / 2, us + sh / 2, sb / 2).buffer(-1.2).buffer(1.2)
-    poly = aussen.difference(schlitz)
+    ur = box(0, yc - H / 2, x_out, yc + H / 2)
+    ur = ur.buffer(-r).buffer(r).union(box(0, yc - H / 2, x_in + 8, yc + H / 2))
+    ur = ur.intersection(box(x_in, yc - H / 2, x_out, yc + H / 2))
+    xs = xb(yc) + SCHLITZ_U * skala
+    sl_h, sl_b = SCHLITZ_H, band_b + 1.0
+    schlitz = box(xs - sl_h / 2, yc - sl_b / 2, xs + sl_h / 2, yc + sl_b / 2).buffer(-1.2).buffer(1.2)
+    poly = ur.difference(schlitz)
+    if seite < 0:
+        from shapely import affinity
+        poly = affinity.scale(poly, xfact=-1, yfact=1, origin=(0, 0))
     v2, f2 = trimesh.creation.triangulate_polygon(poly, triangle_args='pq28a2.0', engine='triangle')
-    ip = RegularGridInterpolator((ug, vg), P, bounds_error=False, fill_value=None)
-    inn = RegularGridInterpolator((ug, vg), NN, bounds_error=False, fill_value=None)
-    uv = np.c_[v2[:, 0], v2[:, 1]]
-    V3 = ip(uv); N3 = inn(uv); N3 /= np.linalg.norm(N3, axis=1, keepdims=True)
-    u = v2[:, 0]
-    t = T_WAND + (FL_DICKE - T_WAND) * np.clip(u / 8.0, 0, 1)
-    t = np.where(u < 0, T_WAND, t)
+    x, y = v2[:, 0], v2[:, 1]
+    z = f(x, y)
+    h = 0.4
+    gx = (f(x + h, y) - f(x - h, y)) / (2 * h); gy = (f(x, y + h) - f(x, y - h)) / (2 * h)
+    N3 = np.stack([-gx, -gy, np.ones_like(gx)], 1); N3 /= np.linalg.norm(N3, axis=1, keepdims=True)
+    V3 = np.stack([x, y, z], 1)
+    d = np.array([foot.exterior.distance(Point(px, py)) if not foot.contains(Point(px, py)) else 0.0 for px, py in zip(x, y)])
+    t = t_wand + (fl_dicke - t_wand) * np.clip(d / (8.0 * skala), 0, 1)
     return verdicke(V3, f2, N3, t)
 
 
