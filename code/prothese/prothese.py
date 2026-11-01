@@ -70,6 +70,45 @@ def kanal_pfad(richtung, z0, radius=None, n=40):
     return np.vstack([start, pts, ext])
 
 
+def kanal_pfad_spitz(scan, z0, richtung, radius=None, psi_end=25.0, d_min=3.9, ds=0.5):
+    """Seitlicher Kanal, der erst um die Nasenspitze herum nach außen und dann in einem spitzen Winkel nach
+    hinten zur Wange läuft (S-Kurve aus zwei Bögen mit Radius R). psi_end ist der Winkel des Stutzens zur
+    -Z-Achse (0 = genau nach hinten, 90 = quer). Der erste Bogen wird so weit gedreht, dass der Kanal überall
+    mindestens d_min von der Haut entfernt bleibt (Kanalradius 1,95 + Spiel 0,15 + Wand 1,8).
+    Rückgabe: (Pfad Start..Ende des zweiten Bogens, Tangente am Ende, Kanalpunkte für den Fräser)"""
+    R = KANAL_BOGEN if radius is None else radius
+    sgn = -1.0 if richtung == 'links' else 1.0
+
+    def bauen(psi1):
+        pts = [np.array([0.0, YA, z0 + 1.5])]
+        p = np.array([0.0, z0])                       # (X, Z)
+        psi = 0.0; pts.append(np.array([p[0], YA, p[1]]))
+        step = ds / R
+        # Bogen 1: Drehung nach außen bis psi1
+        while psi < np.radians(psi1) - 1e-9:
+            h = np.array([sgn * np.sin(psi), -np.cos(psi)])
+            p = p + h * ds; psi += step; pts.append(np.array([p[0], YA, p[1]]))
+        # Bogen 2: zurückdrehen bis psi_end
+        while psi > np.radians(psi_end) + 1e-9:
+            h = np.array([sgn * np.sin(psi), -np.cos(psi)])
+            p = p + h * ds; psi -= step; pts.append(np.array([p[0], YA, p[1]]))
+        h = np.array([sgn * np.sin(psi), 0.0, -np.cos(psi)])
+        return np.array(pts), h / np.linalg.norm(h)
+
+    best = None
+    for psi1 in np.arange(max(psi_end + 5, 40), 125, 2.0):
+        pts, h = bauen(psi1)
+        stub = pts[-1] + np.outer(np.linspace(0, STUTZEN_L, 12), h)      # der Stutzen darf auch nicht in die Nase ragen
+        dist = trimesh.proximity.closest_point(scan, np.vstack([pts[2:], stub]))[1].min()
+        if dist >= d_min:
+            best = (psi1, pts, h, dist); break
+    if best is None:
+        raise RuntimeError('kein Kanalpfad mit genug Abstand zur Haut gefunden')
+    psi1, pts, h, dist = best
+    ext = pts[-1] + np.outer(np.linspace(1, 30, 15), h)
+    return pts, h, np.vstack([pts, ext]), dict(psi1=psi1, dist=dist)
+
+
 def stutzen(punkt, tang, laenge=STUTZEN_L, einbett=STUTZEN_EINBETT, r=STUTZEN_R):
     """Kurzer Schlauchstutzen: Zylinder entlang der Kanal-Tangente, vorn mit gerundeter Kante."""
     h = einbett + laenge
@@ -118,12 +157,24 @@ def verrunden(m, r, pitch=0.6, sigma=1.0, level=0.7):
     return out
 
 
-def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=None, stutzen_spiegel=True):
+def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=None, stutzen_spiegel=True, winkel=None):
     z_platte = Z_PLATTE if z_platte is None else z_platte
     kanal_radius = KANAL_BOGEN if kanal_radius is None else kanal_radius
     filet = R_FILET if filet is None else filet
     A.T_WAND, A.T_RAND, A.FL_DICKE = T_WAND, T_RAND, FL_DICKE
     m = A.lade(scan, skala)
+    pfad_spitz = None
+    if austritt in ('links', 'rechts') and winkel is not None:
+        # Fußplatte so weit nach vorn schieben, wie der Kanal mit seiner Wand um die Nasenspitze herum braucht
+        for zp in np.arange(z_platte, z_platte + 6.1, 0.5):
+            try:
+                pfad_spitz = kanal_pfad_spitz(m, zp, austritt, kanal_radius, winkel)
+                z_platte = float(zp)
+                break
+            except RuntimeError:
+                continue
+        if pfad_spitz is None:
+            raise RuntimeError('kein Kanalpfad mit genug Wand gefunden, Winkel oder Radius ändern')
     p = A.waehle_flaechen(m, skala)
     schale, d, t, (V, F, N, rv) = A.baue_schale(p, skala)
     teile = [schale]; fraeser = []
@@ -144,14 +195,25 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     huelse = trimesh.creation.revolve(prof, sections=128)
     huelse.apply_translation([0, YA, 0])
     teile += [keil, huelse]
-    pfad = kanal_pfad(austritt, z_platte, kanal_radius)
-    if austritt in ('links', 'rechts') and stutzen_spiegel is not None:
-        pe = pfad[40]                                   # Ende des Bogens (n = 40 Punkte, Index 0 ist der Start)
-        tg = pfad[40] - pfad[39]; tg /= np.linalg.norm(tg)
-        st = stutzen(pe, tg)
-        teile.append(st)
-        if stutzen_spiegel:                             # Gegenstutzen auf der anderen Seite (ohne Bohrung): Symmetrie
-            teile.append(spiegeln_x(st))
+    info = {}
+    if pfad_spitz is not None:
+        pts, tg, pfad, info = pfad_spitz
+        info['z_platte'] = z_platte
+        # Wulst um den Kanal (Außenradius wie der Stutzen), läuft mit der Wand fließend mit; Stutzen am Ende
+        boss = trimesh.creation.sweep_polygon(Point(0, 0).buffer(STUTZEN_R, 24), pts[1:])
+        st = stutzen(pts[-1], tg, laenge=STUTZEN_L - 3, einbett=4.0)
+        teile += [boss, st]
+        if stutzen_spiegel:                             # Gegenstück auf der anderen Seite (ohne Bohrung): Symmetrie
+            teile += [spiegeln_x(boss), spiegeln_x(st)]
+    else:
+        pfad = kanal_pfad(austritt, z_platte, kanal_radius)
+        if austritt in ('links', 'rechts') and stutzen_spiegel is not None:
+            pe = pfad[40]
+            tg = pfad[40] - pfad[39]; tg /= np.linalg.norm(tg)
+            st = stutzen(pe, tg)
+            teile.append(st)
+            if stutzen_spiegel:
+                teile.append(spiegeln_x(st))
     ausen = trimesh.boolean.union(teile, engine='manifold')
     if filet > 0:
         weich = verrunden(ausen, filet)
@@ -171,7 +233,7 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     kanal = trimesh.creation.sweep_polygon(Point(0, 0).buffer(KANAL_D / 2, 16), pfad)
     cut = trimesh.boolean.union([nase, tasche, bohrung, kanal] + fraeser, engine='manifold')
     tpu = trimesh.boolean.difference([ausen, cut], engine='manifold')
-    return tpu
+    return tpu, info
 
 
 def hauptkoerper(s):
@@ -216,10 +278,13 @@ def main():
     ap.add_argument('--filet', type=float, default=R_FILET, help='Verrundungsradius der Übergänge, 0 = aus')
     ap.add_argument('--stutzen', choices=['aus', 'einseitig', 'symmetrisch'], default='symmetrisch',
                     help='Schlauchstutzen am seitlichen Austritt; symmetrisch = Gegenstutzen ohne Bohrung auf der anderen Seite')
+    ap.add_argument('--winkel', type=float, default=None, help='Stutzen-Winkel zur -Z-Achse in Grad bei seitlichem Austritt (z. B. 25 = spitz zur Wange); ohne Angabe: quer')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     sp = {'aus': None, 'einseitig': False, 'symmetrisch': True}[a.stutzen]
-    tpu = hauptkoerper(baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet, sp))
+    roh, info = baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet, sp, a.winkel)
+    if info: print(f"Kanal: erster Bogen {info['psi1']:.0f}°, Abstand Kanalmitte–Haut {info['dist']:.1f} mm, Fußplatte bei Z {info['z_platte']:.1f}")
+    tpu = hauptkoerper(roh)
     print(f"TPU-Prothese: wasserdicht={tpu.is_watertight}, Volumen={tpu.volume / 1000:.1f} cm³ "
           f"(~{tpu.volume / 1000 * 1.21:.0f} g bei 100 %), Ausdehnung={np.round(tpu.extents, 1)}, Flächen={len(tpu.faces)}")
     r, ueber = lage_huelse_oben(tpu)
