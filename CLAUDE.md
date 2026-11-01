@@ -59,6 +59,12 @@ Die alten Segmentmaße (Basis-Ø 26,6, Segmentlänge 58, etwa 10 mm Überlappung
   - Nahtposition „Ausgerichtet“, Schrägnaht-Typ „Kontur und Bohrung“.
   - Passung über X-Y-Konturkompensation und X-Y-Loch-Kompensation (Qualität → Präzision) nachjustieren.
   - Zuerst die Passprobe drucken: `probe_segment3_kurz.stl` und `probe_segment4_kurz.stl` (24 mm lang).
+- **Opferfuß (1.11., noch nicht gedruckt):** `segment(k, opfer=True)` erzeugt `nase_segment{1..5}_opferfuss` und `probe_segment{3,4}_kurz_opferfuss` (STL und STEP).
+  - Aufbau: Die Außenfase unten am Bund ist 0,6 statt 0,3. Eine Scheibe 0,8 dick reicht bis Bund-R + 7. Sie ist nur über einen Steg 0,35 dick und 1 mm breit angebunden, der in die Fase hineinläuft (`opferfuss_schnitt.png`).
+  - Nach dem Druck den Steg bündig an der Bund-Gleitfläche abschneiden. Der Rest liegt innerhalb der Fase.
+  - Geprüft im ungünstigsten Fall (Rest füllt die Fase ganz): keine Durchdringungen; laut `bs_support_sim.py` keine Stützen nötig.
+  - Randtyp dazu „Keine Umrandung“, die Scheibe ersetzt den Rand.
+  - Die Teile ohne Opferfuß sind unverändert (Außenfase 0,3).
 - **Montagereihenfolge:**
   1. Segment 2 von unten in Segment 1 schieben, Ring 2 kleben.
   2. Segment 3 von unten durch alles schieben, Ring 3 kleben. Segment 4 und Ring 4 genauso.
@@ -133,7 +139,7 @@ Code: `code/getriebe/`. Generator ist `build4.py` (nutzt `build3.py`, `worm3.py`
   - Qualität → Erweitert: Reihenfolge der Wände (innen/außen, außen/innen).
   - Stärke → Wände → Wandlinien; Fülldichte.
   - Sonstige → Druckbetthaftung → Randtyp.
-  - Profile „0.12mm Fine @BBL A1“ / „@BBL A1M“ (A1 Mini) und „Generic PETG @BBL A1“ / „@BBL A1M“. Haftung: Segmente stehen nur auf einem schmalen Ring. Auf dem A1 Mini lösen sich PETG-Teile trotz großem äußeren Rand nach wenigen Schichten, auf dem A1 deutlich seltener. Z-Hop beim Rückzug war schon 0,4 mm, Profil „@BBL A1M“ war richtig gewählt. Befund: Der Rand bleibt liegen, das Teil reißt vom Rand ab (Lücke stand auf 0,1, Elefantenfußkompensation war schon 0). Nächster Versuch: „Lücke zwischen Rand und Objekt“ 0, danach Bund-Unterkante entgraten. Ergebnis offen. Plan B: Opferfuß in tele.py anmodellieren.
+  - Profile „0.12mm Fine @BBL A1“ / „@BBL A1M“ (A1 Mini) und „Generic PETG @BBL A1“ / „@BBL A1M“. Haftung: Segmente stehen nur auf einem schmalen Ring. Auf dem A1 Mini lösen sich PETG-Teile trotz großem äußeren Rand nach wenigen Schichten, auf dem A1 deutlich seltener. Z-Hop beim Rückzug war schon 0,4 mm, Profil „@BBL A1M“ war richtig gewählt. Befund: Der Rand bleibt liegen, das Teil reißt vom Rand ab (Lücke stand auf 0,1, Elefantenfußkompensation war schon 0). Segment 2 einzeln, 50 %, mit Rand: nach etwa 2/3 der Höhe von der Platte gerutscht (1.11.). Ursache laut Modell: Die Segmente stehen wegen Innenfase 0,6 und Außenfase 0,3 nur auf einem 0,75 mm breiten Ring. Deshalb gibt es jetzt den Opferfuß (siehe Teil A).
 
 ## Nächste Schritte (Peters Rückmeldung abwarten)
 

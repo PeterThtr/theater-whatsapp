@@ -17,3 +17,9 @@ a.save("out/nase_baugruppe_eingefahren.step")
 parts,_=t.assembly(True); a=cq.Assembly()
 for n,p in parts.items(): a.add(p,name=n)
 a.save("out/nase_baugruppe_ausgefahren.step")
+# Druckvarianten mit Opferfuss (A1 Mini: schmale Auflage hält sonst nicht)
+for k in (1, 2, 3, 4, 5):
+    t.export(t.segment(k, opfer=True), f"nase_segment{k}_opferfuss")
+L0 = t.L; t.L = 24.0
+t.export(t.segment(3, opfer=True), "probe_segment3_kurz_opferfuss")
+t.export(t.segment(4, opfer=True), "probe_segment4_kurz_opferfuss"); t.L = L0

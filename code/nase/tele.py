@@ -23,6 +23,12 @@ WT = 1.2          # Ringdicke
 WC = 0.7          # Ringfase / Senkung
 WB = 0.2          # Ringbohrung-Spiel (radial)
 GLUE = 0.05
+# Opferfuss (Druckhilfe, wird nach dem Druck abgeschnitten)
+OF_FASE = 0.6     # Aussenfase unten am Bund (statt 0.3); der Abtrennrest bleibt innerhalb dieser Fase
+OF_STEG = 0.35    # Dicke des Abtrennstegs (2-3 Schichten)
+OF_NUT = 1.0      # radiale Breite des Stegs vor der dicken Scheibe
+OF_DICKE = 0.8    # Dicke der Scheibe
+OF_BREITE = 7.0   # Scheibe reicht bis Bund-Radius + OF_BREITE
 
 # Radien von innen nach aussen
 RI = [None] * 6; RO = [None] * 6
@@ -36,7 +42,10 @@ def revolve(pts):
     return cq.Workplane("XZ").polyline(pts).close().revolve(360, (0, 0, 0), (0, 1, 0)).val()
 
 
-def segment(k):
+def segment(k, opfer=False, fase=None):
+    """opfer=True: mit Opferfuss (druckfertig). fase: Aussenfase unten (Standard 0.3, mit Opferfuss OF_FASE)."""
+    if fase is None:
+        fase = OF_FASE if opfer else 0.3
     Lk = L1 if k == 1 else L
     ri, ro = RI[k], RO[k]
     p = []
@@ -58,9 +67,25 @@ def segment(k):
     # aussen runter
     p += [(ro, Lk)]
     if k == 1:
-        p += [(ro, 0.3), (ro - 0.3, 0.0)]
+        p += [(ro, fase), (ro - fase, 0.0)]
+        rb = ro
     else:
-        p += [(ro, CH + C), (ro + C, CH), (ro + C, 0.3), (ro + C - 0.3, 0.0)]
+        p += [(ro, CH + C), (ro + C, CH), (ro + C, fase), (ro + C - fase, 0.0)]
+        rb = ro + C
+    s = revolve(p)
+    if opfer:
+        s = s.fuse(opferfuss(rb, fase))
+        assert s.isValid() and len(s.Solids()) == 1, "Opferfuss nicht verbunden"
+    return s
+
+
+def opferfuss(rb, fase):
+    """Flache Scheibe um die Unterkante. Verbunden nur über einen dünnen Steg (OF_STEG),
+    der an der Aussenfase ansetzt; der Rest nach dem Abschneiden liegt innerhalb der Fase,
+    also nicht auf der Gleitfläche r = rb."""
+    r0 = rb - fase - 0.1          # leicht ins Teil hinein, damit fuse einen Körper ergibt
+    p = [(r0, 0.0), (rb + OF_BREITE, 0.0), (rb + OF_BREITE, OF_DICKE), (rb + OF_NUT, OF_DICKE),
+         (rb + OF_NUT, OF_STEG), (r0, OF_STEG)]
     return revolve(p)
 
 
