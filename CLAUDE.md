@@ -155,6 +155,14 @@ Code: `code/prothese/anprobe.py` (Scan-STL rein, Anprobe-Schale raus). Der Scan 
 - **Konzept Hülse (1.11., nur Skizze, nichts gebaut):** Die TPU-Prothese umschließt Segment 1 etwa 45 mm weit (frei bleiben etwa 18,5 mm). Der Nasenrücken geht ohne Knick in eine waagerechte Hülse über (Außen-Ø etwa 32, innen etwa 27,4). Achshöhe = Höhe der Nasenspitze. Der Fuß wird rund (ohne Flügel) und sitzt in einer Tasche; Segment 1 bekommt 2 Haltenuten (etwa 0,6 mm tief), in die TPU-Rippen einrasten. Schlauch und Schnur verlassen die Prothese unten an der Spitze. Offen: Das Einschieben von vorn dehnt die Tasche am Fußbecher (Ø 29,8) um etwa 2,4 mm auf. Voraussetzung ist, dass die Anprobe-Schale passt.
 - **Offen:** Anprobe auswerten (Sitz, Nasenlöcher frei, Auflage). Danach den waagerechten Sockel für den Fuß ergänzen. Wie der Fuß im TPU sitzt (Flügel einbetten mit Druckpause oder Einrasttasche), ist noch nicht entschieden. Die Flügel (±24 mm) sind breiter als die Nase (etwa 34 mm) und müssten für den Sockel gekürzt werden.
 
+## Teil D: Drahtvariante statt Feder (Idee, Stand 1.11.2026, nichts gebaut)
+
+- **Idee:** Ein starrer Federstahldraht in einem PTFE-Schlauch schiebt und zieht die Nase (Schub-Zug-Kabel). Die Feder entfällt. Das Einziehen läuft wie bisher über Kappe und Ringe.
+- **Schlauch:** PTFE 4/2 mm (3D-Drucker-Bowdenschlauch). Draht: Federstahl 1,5 mm (1,8 mm ist zu steif und schwer zu bekommen). Das Spiel von 0,25 mm je Seite ergibt grob 2 mm Totgang bei 270° Gesamtkrümmung. Ein dünnerer Schlauch mit gleichem Innen-Ø bringt nichts.
+- **Knicklast** (Euler, beidseitig gelenkig, 245 mm frei): 1,5 mm etwa 9 N, 1,0 mm etwa 1,8 N, 2,0 mm etwa 28 N. Litzenseil trägt weit weniger und kommt zum Schieben nicht infrage.
+- **Test 1 (Peter, 1.11.):** Der Draht lässt sich gut durch den Schlauch schieben. Senkrecht auf die Küchenwaage gedrückt: 0,3 kg, dann biegt sich der Schlauch, maximal 0,4 kg (etwa 3–4 N). Das misst den frei verbogenen Schlauch, nicht den freien Draht. Offen: Test 2 mit eingespanntem Schlauch (3–5 cm) und 245 mm freiem Draht. Erwartung etwa 0,9 kg.
+- **Offen:** Reibung des gedruckten Teleskops messen (wie viel Schub braucht das Ausfahren?). Antrieb mit 186 mm Hub, der schieben und ziehen kann (die Winde zieht nur). Anbindung des Drahts an die Kappe (Sackloch von unten, Klemmschraube oder Epoxid). Fuß mit Aufnahme für den 4-mm-Schlauch. Ohne Feder könnten die Segmente schlanker werden (Parameter `RI5` in `tele.py`).
+
 ## Nächste Schritte (Peters Rückmeldung abwarten)
 
 1. Passprobe Teleskop: Sitz des Spiels 0,15. Bei Bedarf `S` in `tele.py` ändern, neu exportieren und `verify.py` laufen lassen.
