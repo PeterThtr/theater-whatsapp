@@ -141,9 +141,22 @@ Code: `code/getriebe/`. Generator ist `build4.py` (nutzt `build3.py`, `worm3.py`
   - Sonstige → Druckbetthaftung → Randtyp.
   - Profile „0.12mm Fine @BBL A1“ / „@BBL A1M“ (A1 Mini) und „Generic PETG @BBL A1“ / „@BBL A1M“. Haftung: Segmente stehen nur auf einem schmalen Ring. Auf dem A1 Mini lösen sich PETG-Teile trotz großem äußeren Rand nach wenigen Schichten, auf dem A1 deutlich seltener. Z-Hop beim Rückzug war schon 0,4 mm, Profil „@BBL A1M“ war richtig gewählt. Befund: Der Rand bleibt liegen, das Teil reißt vom Rand ab (Lücke stand auf 0,1, Elefantenfußkompensation war schon 0). Segment 2 einzeln, 50 %, mit Rand: nach etwa 2/3 der Höhe von der Platte gerutscht (1.11.). Ursache laut Modell: Die Segmente stehen wegen Innenfase 0,6 und Außenfase 0,3 nur auf einem 0,75 mm breiten Ring. Deshalb gibt es jetzt den Opferfuß (siehe Teil A).
 
+---
+
+## Teil C: TPU-Nasenprothese (Stand 1.11.2026, in Arbeit)
+
+Code: `code/prothese/anprobe.py` (Scan-STL rein, Anprobe-Schale raus). Der Scan selbst liegt **nicht** im Repo (zeigt Peters Gesicht).
+
+- **Scan:** Scaniverse-STL (Meter, Mesh, 3164 Punkte, etwa 1 mm Kantenlänge). Der erste Scan (PLY) war ein Gaussian-Splat und wird nicht verwendet.
+- **Maßstab geprüft:** Peter misst mit Messschieber Nasenlänge 51 mm (Nasenwurzel bis Spitze) und Nasenbreite 33,9 mm. Der Scan liefert etwa 52 mm (Nasenwurzel ist ein flacher Sattel, der Messpunkt schwankt um einige mm) und 31–33 mm. Maßstab 1,00 stimmt also. Eine frühere Messung mit 45,9 mm war ein Anzeigefehler des Messschiebers.
+- **Entscheidungen von Peter:** Das Teleskop zeigt waagerecht vom Gesicht weg. Rund um die Nase soll eine breite Auflagefläche für Hautkleber sein.
+- **Grenze des Scans:** Er reicht seitlich nur etwa 5–7 mm über die Nasenflügel hinaus und nach oben etwa 10 mm. Für eine breitere Auflage braucht es einen größeren Scanbereich (beide Wangen, Stirn bis Oberlippe).
+- **Anprobe-Schale:** 0,8 mm Wand, zum Rand hin 0,4 mm auslaufend, 0,15 mm Spiel zur Haut, Nasenlöcher frei. Gedruckt wird sie stehend auf der unteren Kante mit Rand (Randtyp „Äußerer Rand“, 5–8 mm), praktisch ohne Stützen. Noch nicht gedruckt.
+- **Offen:** Anprobe auswerten (Sitz, Nasenlöcher frei, Auflage). Danach den waagerechten Sockel für den Fuß ergänzen. Wie der Fuß im TPU sitzt (Flügel einbetten mit Druckpause oder Einrasttasche), ist noch nicht entschieden. Die Flügel (±24 mm) sind breiter als die Nase (etwa 34 mm) und müssten für den Sockel gekürzt werden.
+
 ## Nächste Schritte (Peters Rückmeldung abwarten)
 
 1. Passprobe Teleskop: Sitz des Spiels 0,15. Bei Bedarf `S` in `tele.py` ändern, neu exportieren und `verify.py` laufen lassen.
 2. Teleskop V2 komplett drucken und montieren: Durchhang, Stick-Slip, Federführung.
 3. Winde mit den winde4-Teilen: Lagersitz, Halt der eingeklebten Welle, Bremse.
-4. TPU-Prothese nach Scan; der Fuß mit den Flügeln ist vorbereitet.
+4. TPU-Prothese: Anprobe-Schale drucken und auswerten (siehe Teil C).
