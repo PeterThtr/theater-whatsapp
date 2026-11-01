@@ -50,7 +50,8 @@ NASEN_UMRISS = [(-19.5, 33), (19.5, 33), (19.5, -35), (-19.5, -35)]   # Bereich 
 def kanal_pfad(richtung, z0, radius=None, n=40):
     """Mittellinie des Schlauchkanals: von der Fußrückseite zunächst nach hinten, dann im Bogen weg."""
     R = KANAL_BOGEN if radius is None else radius
-    th = np.radians(np.linspace(0, 85, n))
+    # seitlich muss der Bogen etwas weiter laufen (die Hülle ist dort rund und am Rand der Nase etwa 16 mm von der Achse)
+    th = np.radians(np.linspace(0, 85 if richtung == 'unten' else 105, n))
     z = z0 - R * np.sin(th)
     d = R - R * np.cos(th)                 # seitliche Auslenkung
     if richtung == 'unten':
