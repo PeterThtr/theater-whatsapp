@@ -20,20 +20,24 @@ import numpy as np
 import trimesh
 from shapely.geometry import Point
 
+if '--draht' in sys.argv:
+    os.environ['TELE_PROFIL'] = 'draht'
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nase'))
 import anprobe as A
+import tele as T
 
-# ---- Teleskop-Maße (aus code/nase/tele.py)
-SEG1_R = 13.8          # Außenradius Segment 1
-FUSS_R = 14.9          # Außenradius Fußbecher
-FUSS_PLATTE = 1.5
-FUSS_BECHER = 4.0
+# ---- Teleskop-Maße (aus code/nase/tele.py, Profil Feder oder Draht)
+SEG1_R = T.RO[1]       # Außenradius Segment 1
+FUSS_R = T.CUP_RO      # Außenradius Fußbecher
+FUSS_PLATTE = T.PLATE_T
+FUSS_BECHER = T.CUP_H
 
 # ---- Prothese
 YA = -19.0             # Höhe der Teleskopachse (Nasenspitze)
 Z_PLATTE = 38.0        # Rückseite der Fußplatte (Z); die Nasenspitze liegt bei Z ~ 22,5
 HUELSE_LAENGE = 45.0   # Hülse um Segment 1 (ab Segmentanfang)
-HUELSE_R = 16.2        # Außenradius der Hülse
+HUELSE_R = max(SEG1_R + 2.4, FUSS_R + 1.8) if T.DRAHT else 16.2   # Außenradius der Hülse
 BOHRUNG_R = SEG1_R - 0.25   # Presssitz, 0,5 mm Übermaß im Durchmesser
 TASCHE_R = FUSS_R + 0.2
 KANAL_D = 3.9          # für 4-mm-PTFE-Schlauch (leicht untermaßig, TPU hält ihn)
@@ -50,6 +54,10 @@ BOSS_H = 2.0           # Mitte des Kanals über der Außenfläche des Flügels (
 T_WAND, T_RAND, FL_DICKE = 1.2, 0.5, 2.0
 KEIL_Z_AB = 6.0        # Ab dieser Z-Höhe beginnt der Keil (Nasenspitzenbereich)
 KEIL_Y_BIS = 2.0
+# Umriss der Schale: oben bei Y 14 statt 31 (weniger Material an der Nasenwurzel), unten bleibt die Unterseite vor Z 15 erhalten
+OUTLINE_P = [(-9.5, 14), (9.5, 14), (13, 9), (17, 3), (20, -4), (21, -12), (21, -20), (19, -26), (14, -29), (5, -30), (-5, -30),
+             (-14, -29), (-19, -26), (-21, -20), (-21, -12), (-19, -4), (-16, 3), (-12.5, 9)]
+UNTEN_Z_P = 15.0
 NASEN_UMRISS = [(-19.5, 33), (19.5, 33), (19.5, -35), (-19.5, -35)]   # Bereich des Scans, aus dem der Nasenkörper entsteht
 
 
@@ -121,18 +129,29 @@ def kanal_pfad_fluegel(scan, z0, richtung, radius, psi_end, ctx, d_min=3.9, ds=0
     from scipy.interpolate import splprep, splev
     R = KANAL_BOGEN if radius is None else radius
     sgn = -1.0 if richtung == 'links' else 1.0
-    f = ctx['f']; xb0, xl = ctx['xb0'], ctx['xl']
+    f = ctx['f']
+    O, ax_, nv_ = ctx['O'], ctx['a'], ctx['n']
+    lm, Aa, Bb = ctx['lm'], ctx['A'], ctx['B']
 
     def flaechenpunkt(xa, y, hoehe):
+        """Punkt in der Höhe `hoehe` über der Flügelfläche (entlang der Normalen), so verschoben, dass seine
+        Projektion nach (X, Y) genau bei (sgn*xa, y) liegt (die Normale versetzt den Punkt sonst seitlich)."""
         h = 0.4
-        z = float(f(xa, y))
-        fx = (float(f(xa + h, y)) - float(f(xa - h, y))) / (2 * h)
-        fy = (float(f(xa, y + h)) - float(f(xa, y - h))) / (2 * h)
-        n = np.array([-fx * sgn, -fy, 1.0]); n /= np.linalg.norm(n)     # f ist über |x| definiert
-        return np.array([sgn * xa, y, z]) + hoehe * n
+        ziel = np.array([sgn * xa, y]); c = ziel.copy()
+        for _ in range(4):
+            ca = abs(c[0])
+            z = float(f(ca, c[1]))
+            fx = (float(f(ca + h, c[1])) - float(f(ca - h, c[1]))) / (2 * h)
+            fy = (float(f(ca, c[1] + h)) - float(f(ca, c[1] - h))) / (2 * h)
+            n = np.array([-fx * sgn, -fy, 1.0]); n /= np.linalg.norm(n)     # f ist über |x| definiert
+            q = np.array([c[0], c[1], z]) + hoehe * n
+            c = c + (ziel - q[:2])
+        return q
 
     hc = A.SPIEL + FL_DICKE + BOSS_H                  # Kanalmitte über der Haut-Seite des Flügels
-    steuer = [(xb0 + 5.0, -19.5), (xb0 + 14.0, -20.5), (xl, -21.0), (xl + 8.0, -19.5), (xl + 12.5, -14.0), (xl + 14.5, -8.0)]
+    vb = -(Bb - BOSS_R - 1.3)                         # Pfad läuft am unteren Rand des Lappens (lokales v)
+    lokal = [(6.0, vb), (lm * 0.65, vb), (lm - 3.0, vb), (lm + 2.0, vb + 0.6), (lm + Aa - 4.5, vb + 4.0), (lm + Aa - 2.0, vb + 8.0)]
+    steuer = [tuple(O + u * ax_ + v * nv_) for u, v in lokal]
     wing = np.array([flaechenpunkt(xa, y, hc) for xa, y in steuer])
 
     def s_kurve(psi1, psi_e):
@@ -168,7 +187,7 @@ def kanal_pfad_fluegel(scan, z0, richtung, radius, psi_end, ctx, d_min=3.9, ds=0
                 d1 = np.array(splev(uu, tck, der=1)).T; d2 = np.array(splev(uu, tck, der=2)).T
                 kappa = np.linalg.norm(np.cross(d1, d2), axis=1) / np.maximum(np.linalg.norm(d1, axis=1) ** 3, 1e-9)
                 rad = 1.0 / max(kappa[2:-2].max(), 1e-9)
-                if rad < R - 0.8:
+                if rad < R - 1.0:
                     log.append((round(float(psi_e)), round(float(psi1)), sfac, '-', round(float(rad), 1)))
                     continue
                 dist = trimesh.proximity.closest_point(scan, pts[2:])[1]
@@ -241,6 +260,8 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     kanal_radius = KANAL_BOGEN if kanal_radius is None else kanal_radius
     filet = R_FILET if filet is None else filet
     A.T_WAND, A.T_RAND, A.FL_DICKE = T_WAND, T_RAND, FL_DICKE
+    A.OUTLINE = OUTLINE_P
+    A.UNTEN_Z = UNTEN_Z_P
     m = A.lade(scan, skala)
     p = A.waehle_flaechen(m, skala)
     schale, d, t, (V, F, N, rv) = A.baue_schale(p, skala)
@@ -253,7 +274,7 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
         _, _, ctx = A.baue_fluegel(V, N, rv, seite_k, skala, band, t_wand=T_WAND, fl_dicke=FL_DICKE, schlitz_im_koerper=False)
     if seite_k is not None and winkel is not None:
         # Fußplatte so weit nach vorn schieben, wie der Kanal mit seiner Wand um die Nasenspitze herum braucht
-        for zp in np.arange(z_platte, z_platte + 6.1, 0.5):
+        for zp in np.arange(z_platte, z_platte + 14.1, 0.5):
             try:
                 if im_fluegel:
                     pfad_spitz = kanal_pfad_fluegel(m, zp, austritt, kanal_radius, winkel, ctx)
@@ -366,7 +387,7 @@ def lage_huelse_oben(s):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('scan'); ap.add_argument('--scale', type=float, default=1.0)
-    ap.add_argument('--out', default='out'); ap.add_argument('--band', type=float, default=20.0)
+    ap.add_argument('--out', default='out'); ap.add_argument('--draht', action='store_true', help='Maße des schlanken Drahtsatzes (TELE_PROFIL=draht)'); ap.add_argument('--band', type=float, default=12.0)
     ap.add_argument('--austritt', default='unten', choices=['unten', 'links', 'rechts'])
     ap.add_argument('--z-platte', type=float, default=Z_PLATTE, help='Z der Fußplatten-Rückseite (Nasenspitze: 22,5)')
     ap.add_argument('--kanal-radius', type=float, default=KANAL_BOGEN)

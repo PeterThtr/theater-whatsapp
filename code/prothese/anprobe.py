@@ -22,6 +22,7 @@ OUTLINE = [(-17, 31), (17, 31), (13, 24), (11.5, 16), (13, 9), (17, 3), (20, -4)
            (21, -20), (19, -26), (14, -29), (5, -30), (-5, -30), (-14, -29), (-19, -26),
            (-21, -20), (-21, -12), (-19, -4), (-16, 3), (-12.5, 9), (-11, 16), (-13, 24)]
 UNTEN_Y = -12.0        # unterhalb davon werden nach unten zeigende Flächen entfernt ...
+UNTEN_Z = 1e9          # nach unten zeigende Flächen werden nur hinter dieser Z-Höhe entfernt (vor der Spitze bleiben sie)
 UNTEN_NY = -0.55       # ... wenn ihre Normale n_y kleiner ist (Unterseite der Spitze, Nasenlöcher)
 
 SPIEL = 0.15           # Abstand Schale-Haut (Klebefilm)
@@ -32,17 +33,19 @@ T_AUSLAUF = 6.0        # Länge, über die die Wand vom Rand aus dicker wird (mm
 # ---- Flügel mit Schlitz für ein flaches Gummiband (nur mit --fluegel)
 BAND_B = 20.0          # Breite des Gummibands (mm), per --band einstellbar
 FL_LAENGE = 34.0       # Länge des Flügels ab dem Schalenrand (mm)
-FL_Y = -6.0            # Höhe der Flügelmitte (Y im Scan, unskaliert)
+FL_Y = -10.0            # Höhe der Flügelmitte (Y im Scan, unskaliert)
 FL_DICKE = 1.6         # Dicke des Flügels
 FL_UEBERLAPP = 4.0     # der Flügel beginnt so weit innerhalb der Schale (damit beide verschmelzen)
 SCHLITZ_H = 3.5        # Schlitzhöhe in Bandrichtung (Band + Falte)
 SCHLITZ_U = 20.0       # Abstand der Schlitzmitte vom Schalenrand
 WANGE_STEIGUNG = -0.4  # mittlere Steigung der Wange seitlich der Nase (mm Z je mm X)
 R_WANGE = 90.0        # Krümmungsradius der Wölbung in Y über dem Wangenknochen
-LAPPEN_MITTE = 24.0    # Abstand der Lappenmitte vom Schalenrand (mm)
-LAPPEN_A = 15.0        # Halbachse des Lappens in X
-LAPPEN_B = 21.0        # Halbachse des Lappens in Y (Höhe 42 mm)
-SCHLITZ_DY = 4.0       # Schlitz liegt um so viel höher als die Flügelmitte (unten bleibt Platz für den Schlauchwulst)
+FL_WINKEL = -20.0      # Neigung der Flügelachse in der Vorderansicht (negativ = nach außen unten)
+LAPPEN_MITTE = 16.0    # Abstand der Lappenmitte vom Schalenrand (mm)
+LAPPEN_A = 11.0        # Halbachse des Lappens in X
+LAPPEN_B = 15.0        # Halbachse des Lappens quer zur Achse (Höhe 28 mm)
+SCHLITZ_DV = 5.0       # Schlitz liegt so viel höher als die Flügelachse (unten läuft der Schlauchwulst)
+SCHLITZ_DY_ALT = 4.0       # Schlitz liegt um so viel höher als die Flügelmitte (unten bleibt Platz für den Schlauchwulst)
 R_KOPF = 75.0          # angenommener Krümmungsradius der Kopfseite (Flügel biegen sich nach hinten)
 
 
@@ -62,7 +65,7 @@ def waehle_flaechen(m, skala, outline=None, unten_frei=True):
     poly = Path(np.array(OUTLINE if outline is None else outline, float) * skala)
     sel = poly.contains_points(c[:, :2])
     # Unterseite der Spitze / Nasenlöcher: nur der größte zusammenhängende Bereich wird entfernt
-    u = np.where(sel & (c[:, 1] < UNTEN_Y * skala) & (n[:, 1] < UNTEN_NY))[0] if unten_frei else []
+    u = np.where(sel & (c[:, 1] < UNTEN_Y * skala) & (n[:, 1] < UNTEN_NY) & (c[:, 2] < UNTEN_Z * skala))[0] if unten_frei else []
     if len(u):
         adj = m.face_adjacency
         keep = np.isin(adj[:, 0], u) & np.isin(adj[:, 1], u)
@@ -167,7 +170,7 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, sch
     from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
     t_wand = T_WAND if t_wand is None else t_wand
     fl_dicke = FL_DICKE if fl_dicke is None else fl_dicke
-    H0 = band_b + 7.0                       # Höhe an der Wurzel
+    H0 = band_b + 8.0                       # Höhe an der Wurzel
     yc = FL_Y * skala
     foot = Polygon(np.array(OUTLINE, float) * skala)
     lin = LinearNDInterpolator(V[:, :2], V[:, 2]); nea = NearestNDInterpolator(V[:, :2], V[:, 2])
@@ -187,7 +190,7 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, sch
 
     # Randwerte entlang Y vorab bestimmen und glätten (der Scanrand ist unruhig, das soll nicht in den Flügel wandern)
     from scipy.ndimage import gaussian_filter1d
-    yg = np.arange(yc - LAPPEN_B - 8, yc + LAPPEN_B + 8.01, 0.5)
+    yg = np.arange(yc - 45, yc + 25.01, 0.5)
     x0g = np.array([xb(v) - 1.5 for v in yg])
     fbg = np.array([float(f_scan(seite * x0, v)) for x0, v in zip(x0g, yg)])
     f2g = np.array([float(f_scan(seite * (x0 - 3.0), v)) for x0, v in zip(x0g, yg)])
@@ -208,18 +211,21 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, sch
         ext = ext - 0.5 * (yy - yc) ** 2 / R_WANGE * ramp
         return np.where(a <= x0, f_scan(xx, yy), ext)
 
-    # Umriss: Wurzel (Rechteck, reicht in die Schale hinein) und ein Ellipsen-Lappen, dazwischen die konvexe Hülle
-    x_in = xb(yc + H0 / 2) - 6 * skala
-    xl = xb(yc) + LAPPEN_MITTE * skala
-    wurzel = box(x_in, yc - H0 / 2, xb(yc) + 2 * skala, yc + H0 / 2)
-    ell = affinity.scale(Point(xl, yc).buffer(1, 96), xfact=LAPPEN_A * skala, yfact=LAPPEN_B * skala)
-    ur = unary_union([wurzel, ell]).convex_hull
+    # Umriss in lokalen Koordinaten (u entlang der Flügelachse, v quer dazu, nach oben positiv), danach gedreht:
+    # Wurzel (Rechteck, reicht in die Schale hinein) und ein Ellipsen-Lappen, dazwischen die konvexe Hülle
+    th = np.radians(FL_WINKEL)
+    ax_ = np.array([np.cos(th), np.sin(th)]); nv_ = np.array([-np.sin(th), np.cos(th)])
+    O = np.array([xb(yc), yc])
+    mat = [ax_[0], nv_[0], ax_[1], nv_[1], O[0], O[1]]
+    wurzel = box(-8 * skala, -H0 / 2, 2 * skala, H0 / 2)
+    ell = affinity.scale(Point(LAPPEN_MITTE * skala, 0).buffer(1, 96), xfact=LAPPEN_A * skala, yfact=LAPPEN_B * skala)
+    ur = affinity.affine_transform(unary_union([wurzel, ell]).convex_hull, mat)
     if extra_poly is not None:
         ur = unary_union([ur, extra_poly])
     ur = ur.buffer(-3 * skala).buffer(3 * skala)
     sl_h, sl_b = SCHLITZ_H, band_b + 1.0
-    ys = yc + SCHLITZ_DY * skala
-    schlitz = box(xl - sl_h / 2, ys - sl_b / 2, xl + sl_h / 2, ys + sl_b / 2).buffer(-1.2).buffer(1.2)
+    schlitz = affinity.affine_transform(
+        box(LAPPEN_MITTE * skala - sl_h / 2, SCHLITZ_DV - sl_b / 2, LAPPEN_MITTE * skala + sl_h / 2, SCHLITZ_DV + sl_b / 2).buffer(-1.2).buffer(1.2), mat)
     poly = ur.difference(schlitz) if schlitz_im_koerper else ur
     if seite < 0:
         poly = affinity.scale(poly, xfact=-1, yfact=1, origin=(0, 0))
@@ -238,19 +244,21 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, sch
     t = np.maximum(t, 0.6)
     koerper = verdicke(V3, f2, N3, t)
     fraeser = None
+    sl_mid = O + (LAPPEN_MITTE * skala) * ax_ + SCHLITZ_DV * nv_            # Schlitzmitte (positives X)
     if not schlitz_im_koerper:
-        xs = -xl if seite < 0 else xl
+        xs, ys = seite * sl_mid[0], sl_mid[1]
         zs = float(f(xs, ys)); h = 0.4
         n = np.array([-(f(xs + h, ys) - f(xs - h, ys)) / (2 * h), -(f(xs, ys + h) - f(xs, ys - h)) / (2 * h), 1.0])
         n /= np.linalg.norm(n)
-        ey = np.array([0.0, 1.0, 0.0]) - n[1] * n; ey /= np.linalg.norm(ey)
+        ey = np.array([seite * nv_[0], nv_[1], 0.0]); ey = ey - (ey @ n) * n; ey /= np.linalg.norm(ey)
         ex = np.cross(ey, n)
         pf = box(-sl_h / 2, -sl_b / 2, sl_h / 2, sl_b / 2).buffer(-1.2).buffer(1.2)
         fraeser = trimesh.creation.extrude_polygon(pf, 12.0)
         fraeser.apply_translation([0, 0, -6.0])
         T = np.eye(4); T[:3, 0] = ex; T[:3, 1] = ey; T[:3, 2] = n; T[:3, 3] = [xs, ys, zs]
         fraeser.apply_transform(T)
-    ctx = dict(f=lambda xa, y: f(seite * np.asarray(xa, float), y), xb0=xb(yc), xl=xl, yc=yc, ys=ys, sl_b=sl_b, sl_h=sl_h, seite=seite)
+    ctx = dict(f=lambda xa, y: f(seite * np.asarray(xa, float), y), O=O, a=ax_, n=nv_, lm=LAPPEN_MITTE * skala, A=LAPPEN_A * skala,
+               B=LAPPEN_B * skala, dv=SCHLITZ_DV, sl_b=sl_b, sl_h=sl_h, seite=seite)
     return koerper, fraeser, ctx
 
 
