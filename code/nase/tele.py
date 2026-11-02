@@ -5,6 +5,11 @@ Koordinaten: z = Achse, z=0 = Oberseite Fussplatte = Unterkante Segment 1. Masse
 import math, os, sys
 import cadquery as cq
 
+# Profil: "feder" (Druckfeder + Schnur, Bohrung Ø 10,8 in Segment 5) oder "draht" (Schub-Zug-Draht Ø 1,5, viel schlanker).
+# Umschalten per Umgebungsvariable: TELE_PROFIL=draht python3 export_all.py
+PROFIL = os.environ.get("TELE_PROFIL", "feder")
+DRAHT = PROFIL == "draht"
+
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 os.makedirs(OUT, exist_ok=True)
 
@@ -17,8 +22,8 @@ CH = 10.0         # Bundhöhe
 FUN = 0.6         # Einlauffase innen unten (Feder)
 L = 62.0          # Länge Segmente 2..5
 L1 = 63.5         # Länge Segment 1
-W = [None, 1.2, 1.0, 1.0, 1.0, 1.0]   # Wandstärken
-RI5 = 5.4         # Bohrung Segment 5 (Feder AD 10)
+W = [None, 1.2, 1.0, 1.0, 1.0, 0.8 if DRAHT else 1.0]   # Wandstärken
+RI5 = 1.7 if DRAHT else 5.4   # Bohrung Segment 5: Draht Ø 1,5 (Ø 3,4 Bohrung) bzw. Feder AD 10
 WT = 1.2          # Ringdicke
 WC = 0.7          # Ringfase / Senkung
 WB = 0.2          # Ringbohrung-Spiel (radial)
@@ -113,6 +118,11 @@ def cap():
         p.append((CAP_R * math.cos(a), z0 + CAP_R * math.sin(a)))
     p[-1] = (0.0, z0 + CAP_R)
     s = revolve(p)
+    if DRAHT:
+        # Sackloch Ø 1,7 von unten für den Draht (mit 2K-Epoxid oder Sekundenkleber einkleben, 11 mm tief)
+        hole = cq.Workplane("XY").workplane(offset=SHAFT_BOT - 0.1).circle(0.85).extrude(11.55).val()
+        cone = cq.Solid.makeCone(1.3, 0.85, 0.45, cq.Vector(0, 0, SHAFT_BOT), cq.Vector(0, 0, 1))
+        return s.cut(hole).cut(cone)
     # Knotenfenster: Tropfenform quer (Achse x), Spitze oben
     zc = SHAFT_BOT + 1.6 + 1.75
     r = 1.75
@@ -134,9 +144,9 @@ def cap():
 # Fuss
 PLATE_T = 1.5
 CUP_RI = RO[1] + GLUE
-CUP_RO = 14.9
+CUP_RO = (CUP_RI + 1.0) if DRAHT else 14.9
 CUP_H = 4.0
-BOSS_R, BOSS_H = 4.0, 2.0
+BOSS_R, BOSS_H = (2.5, 1.4) if DRAHT else (4.0, 2.0)      # Federdorn bzw. kurze Drahtführung (bleibt unter Segment 5: Unterkante bei z = 1,7)
 WING_TIP = 24.0
 WING_HW = 5.5
 HOLES_X = (17.6, 21.0)
@@ -163,9 +173,10 @@ def foot(wings=True):
                    (CUP_RI + 0.3, CUP_H), (CUP_RI, CUP_H - 0.3)])
     boss = revolve([(0.0, 0.0), (BOSS_R, 0.0), (BOSS_R, BOSS_H - 0.4), (BOSS_R - 0.4, BOSS_H), (0.0, BOSS_H)])
     s = plate.fuse(cup).fuse(boss)
-    hole = cq.Workplane("XY").workplane(offset=-PLATE_T - 1).circle(0.75).extrude(PLATE_T + BOSS_H + 2).val()
-    fun_top = cq.Solid.makeCone(0.75, 1.3, 0.55, cq.Vector(0, 0, BOSS_H - 0.55), cq.Vector(0, 0, 1))
-    fun_bot = cq.Solid.makeCone(1.15, 0.75, 0.4, cq.Vector(0, 0, -PLATE_T), cq.Vector(0, 0, 1))
+    hr = 0.9 if DRAHT else 0.75                  # Loch für Draht Ø 1,8 bzw. Schnur Ø 1,5
+    hole = cq.Workplane("XY").workplane(offset=-PLATE_T - 1).circle(hr).extrude(PLATE_T + BOSS_H + 2).val()
+    fun_top = cq.Solid.makeCone(hr, hr + 0.55, 0.55, cq.Vector(0, 0, BOSS_H - 0.55), cq.Vector(0, 0, 1))
+    fun_bot = cq.Solid.makeCone(hr + 0.4, hr, 0.4, cq.Vector(0, 0, -PLATE_T), cq.Vector(0, 0, 1))
     return s.cut(hole).cut(fun_top).cut(fun_bot).clean()
 
 

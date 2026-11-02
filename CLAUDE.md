@@ -168,13 +168,18 @@ Code: `code/prothese/anprobe.py` (Scan-STL rein, Anprobe-Schale, mit `--fluegel`
   - **Druck:** Lage Hülse nach oben, Höhe 143 mm, Überhang (Neigung < 30°) etwa 4 cm². Die Flügel stehen nur mit ihren Kanten auf der Platte (Rand „Äußerer Rand“ nötig). Ob Stützen nötig sind, zeigt die Vorschau in Bambu Studio.
 - **Offen:** Anprobe mit Flügeln und Band (PETG) wäre sinnvoll, bevor in TPU gedruckt wird. Haltenuten und Segment-1-Anpassung, Antrieb und Anbindung des Drahts (Teil D).
 
-## Teil D: Drahtvariante statt Feder (Idee, Stand 1.11.2026, nichts gebaut)
+## Teil D: Drahtvariante statt Feder (Stand 2.11.2026, Elemente neu gerechnet, nichts gedruckt)
 
 - **Idee:** Ein starrer Federstahldraht in einem PTFE-Schlauch schiebt und zieht die Nase (Schub-Zug-Kabel). Die Feder entfällt. Das Einziehen läuft wie bisher über Kappe und Ringe.
 - **Schlauch:** PTFE 4/2 mm (3D-Drucker-Bowdenschlauch). Draht: Federstahl 1,5 mm (1,8 mm ist zu steif und schwer zu bekommen). Das Spiel von 0,25 mm je Seite ergibt grob 2 mm Totgang bei 270° Gesamtkrümmung. Ein dünnerer Schlauch mit gleichem Innen-Ø bringt nichts.
 - **Knicklast** (Euler, beidseitig gelenkig, 245 mm frei): 1,5 mm etwa 9 N, 1,0 mm etwa 1,8 N, 2,0 mm etwa 28 N. Litzenseil trägt weit weniger und kommt zum Schieben nicht infrage.
 - **Test 1 (Peter, 1.11.):** Der Draht lässt sich gut durch den Schlauch schieben. Senkrecht auf die Küchenwaage gedrückt: 0,3 kg, dann biegt sich der Schlauch, maximal 0,4 kg (etwa 3–4 N). Das misst den frei verbogenen Schlauch, nicht den freien Draht. Offen: Test 2 mit eingespanntem Schlauch (3–5 cm) und 245 mm freiem Draht. Erwartung etwa 0,9 kg.
 - **Offen:** Reibung des gedruckten Teleskops messen (wie viel Schub braucht das Ausfahren?). Antrieb mit 186 mm Hub, der schieben und ziehen kann (die Winde zieht nur). Anbindung des Drahts an die Kappe (Sackloch von unten, Klemmschraube oder Epoxid). Fuß mit Aufnahme für den 4-mm-Schlauch. Ohne Feder könnten die Segmente schlanker werden (Parameter `RI5` in `tele.py`).
+
+- **Elemente für den Draht (2.11., gerechnet, nicht gedruckt):** `TELE_PROFIL=draht python3 code/nase/export_all.py` (und `verify.py`, `render.py`) erzeugt den schlanken Satz mit Dateien `nase_draht_*` und `probe_draht_*`, abgelegt in `teile/aktuell/nase_draht/` (STL und STEP, dazu `nase_draht_schnitt.png`). Ohne die Variable bleibt alles wie bei der Feder (Regression geprüft: Volumina identisch). Der Parameter `RI5` (Bohrung Segment 5) legt alle Radien fest.
+  - **Maße:** Außen-Ø Segment 1–5: 19,8 / 15,8 / 12,2 / 8,6 / **5,0** mm (vorher 27,6 / 23,6 / 20,0 / 16,4 / 12,8). Bund-Ø 17,1 / 13,5 / 9,9 / 6,3. Bohrung Segment 5 Ø 3,4 (Draht 1,5), Wand Segment 5 0,8, Segmente 2–4 1,0, Segment 1 1,2. Längen, Spiel (0,15), Ringspalt (0,8), Hub (185,8 mm) und alle Anschläge unverändert. Eingefahren 69,5 mm, ausgefahren 255,3 mm. Masse etwa 18,6 g statt 32,7 g bei 100 %.
+  - **Kappe:** Sackloch Ø 1,7 von unten für den Draht (11 mm tief, mit 2K-Epoxid oder Sekundenkleber einkleben), Schaft Ø 3,2, Kappen-Ø 6,4. **Fuß rund:** Becher Ø 21,9, Plattenloch Ø 1,8, kurze Drahtführung (R 2,5, 1,4 hoch, bleibt unter Segment 5). Der Flügelfuß hat weiter seine Flügel (±24), aber noch keine Schlauchaufnahme (die übernimmt die TPU-Prothese).
+  - **Geprüft am Modell:** keine Durchdringungen in beiden Endlagen, Anschläge wie vorher; laut `bs_support_sim.py` keine Stützen (Segmente mit Opferfuß). **Offen:** Segment 5 steht nur auf einem Bund-Ø 6,3, also Opferfuß und Rand nötig. Der Draht läuft frei durch Bohrungen von Ø 3,4 bis 17,4, geführt wird er nur in Segment 5. Die Prothese (Hülse, Fußtasche) ist noch auf die alten Maße gerechnet und muss angepasst werden.
 
 ## Nächste Schritte (Peters Rückmeldung abwarten)
 
