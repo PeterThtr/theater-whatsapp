@@ -282,7 +282,7 @@ def verrunden(m, r, pitch=0.6, sigma=1.0, level=0.7):
 
 
 def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=None, stutzen_spiegel=True, winkel=None,
-         im_fluegel=False, holz=0.0):
+         im_fluegel=False, holz=0.0, holz_stil='fein'):
     z_platte = Z_PLATTE if z_platte is None else z_platte
     kanal_radius = KANAL_BOGEN if kanal_radius is None else kanal_radius
     filet = R_FILET if filet is None else filet
@@ -360,9 +360,6 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     if filet > 0:
         weich = verrunden(ausen, filet)
         ausen = trimesh.boolean.union([ausen, weich], engine='manifold')
-    if holz > 0:
-        import holz as H                                # Holzrelief auf der Außenseite, bevor die Hohlräume exakt abgezogen werden
-        ausen = H.holzstruktur(ausen, tiefe=holz)
     # Nase (Haut + Spiel) nach hinten verlängert, Tasche, Bohrung, Kanal, Bandschlitze: werden abgezogen
     # Der Nasenkörper (alles hinter der Haut, inklusive Unterseite der Spitze und Nasenlöcher) wird als Prisma
     # entlang -Z aus der vollständigen Scanfläche erzeugt. Die Fläche ist (fast) ein Höhenfeld über (X, Y).
@@ -381,6 +378,19 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     if stutzen_spiegel == 'beide':                       # zweiter Kanal spiegelgleich: der Schlauch kann links oder rechts laufen
         kanaele.append(spiegeln_x(kanal))
     cut = trimesh.boolean.union([nase, tasche, bohrung] + kanaele + fraeser, engine='manifold')
+    if holz > 0:
+        import holz as H                                # Holzrelief auf der Außenseite, danach werden die Hohlräume exakt abgezogen
+        if holz_stil == 'grob':
+            glatt = trimesh.boolean.difference([ausen, cut], engine='manifold')    # für die Wanddicke unter den Astlöchern
+            z_spitze = float(m.vertices[:, 2].max())
+            aeste = [((4.0, YA + HUELSE_R, z_seg0 + 20.0), 3.0),                  # Hülse oben
+                     ((-0.7 * HUELSE_R, YA - 0.7 * HUELSE_R, z_ende - 11.0), 2.4),  # Hülse unten links
+                     ((13.0, YA + 3.0, 0.5 * (z_spitze + z_start)), 2.6),       # Keil rechts
+                     ((-30.0, YA + 4.0, -20.0), 2.0, False),                   # linker Flügel: geschlossener Ast (Flügel zu dünn für ein Loch)
+                     ((34.0, YA + 6.0, -24.0), 1.6, False)]                    # rechter Flügel: geschlossener Ast
+            ausen, info['aeste'] = H.holzstruktur_grob(ausen, glatt, aeste, tiefe=holz)
+        else:
+            ausen = H.holzstruktur(ausen, tiefe=holz)
     tpu = trimesh.boolean.difference([ausen, cut], engine='manifold')
     return tpu, info
 
@@ -430,6 +440,7 @@ def main():
     ap.add_argument('--im-fluegel', action='store_true', help='Schlauchkanal läuft im Flügel bis zum äußeren Rand (nur mit --winkel und seitlichem Austritt)')
     ap.add_argument('--winkel', type=float, default=None, help='Stutzen-Winkel zur -Z-Achse in Grad bei seitlichem Austritt (z. B. 25 = spitz zur Wange); ohne Angabe: quer')
     ap.add_argument('--holz', type=float, default=0.0, help='Holzrelief auf der Außenseite (0 = aus, 1 = normal, 1,5 = kräftiger)')
+    ap.add_argument('--holz-stil', choices=['fein', 'grob'], default='fein', help='fein = Maserung und weiche Dellen; grob = grob geschnitzt mit Facetten und Astlöchern')
     ap.add_argument('--wand', type=float, default=None, help='Wandstärke der Schale auf der Nase in mm (Standard 1,2; dünn: 0,8)')
     ap.add_argument('--fluegel-dicke', type=float, default=None, help='Dicke der Flügel in mm (Standard 2,0; dünn: 1,5)')
     ap.add_argument('--achse-y', type=float, default=None, help='Höhe der Teleskopachse (Standard −19 = Höhe der Nasenspitze); tiefer macht den Keil auf der Nase dünner')
@@ -453,8 +464,10 @@ def main():
         FL_DICKE = a.fluegel_dicke
     os.makedirs(a.out, exist_ok=True)
     sp = {'aus': None, 'einseitig': False, 'symmetrisch': True, 'beidseitig': 'beide'}[a.stutzen]
-    roh, info = baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet, sp, a.winkel, a.im_fluegel, a.holz)
-    if info: print(f"Kanal: erster Bogen {info['psi1']:.0f}°, Abstand Kanalmitte–Haut {info['dist']:.1f} mm, Fußplatte bei Z {info['z_platte']:.1f}" + (f", kleinster Radius {info['radius']:.1f} mm" if 'radius' in info else ''))
+    roh, info = baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet, sp, a.winkel, a.im_fluegel, a.holz, a.holz_stil)
+    for p, rl, ti in info.get('aeste', []):
+        print(f"{'Astloch' if ti > 0 else 'Ast (geschlossen)'} bei X {p[0]:.1f} Y {p[1]:.1f} Z {p[2]:.1f}: Ø {2 * rl:.1f}" + (f", Tiefe {ti:.2f} mm" if ti > 0 else ''))
+    if info.get('psi1') is not None: print(f"Kanal: erster Bogen {info['psi1']:.0f}°, Abstand Kanalmitte–Haut {info['dist']:.1f} mm, Fußplatte bei Z {info['z_platte']:.1f}" + (f", kleinster Radius {info['radius']:.1f} mm" if 'radius' in info else ''))
     tpu = hauptkoerper(roh)
     print(f"TPU-Prothese: wasserdicht={tpu.is_watertight}, Volumen={tpu.volume / 1000:.1f} cm³ "
           f"(~{tpu.volume / 1000 * 1.21:.0f} g bei 100 %), Ausdehnung={np.round(tpu.extents, 1)}, Flächen={len(tpu.faces)}")
