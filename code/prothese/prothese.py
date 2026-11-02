@@ -343,11 +343,14 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     nase = A.verdicke(Vf, np.asarray(pv.faces), np.tile([0.0, 0.0, -1.0], (len(Vf), 1)), np.full(len(Vf), 60.0), spiel=0.0)
     z_tasche0 = z_platte - 0.2
     z_tasche1 = z_seg0 + FUSS_BECHER + 0.2
-    tasche = zylinder(TASCHE_R, z_tasche0, z_tasche1)
-    bohrung = zylinder(BOHRUNG_R, z_tasche1 - 0.5, z_ende + 2)
+    tasche = zylinder(TASCHE_R, z_tasche0, z_tasche1, y=YA)
+    bohrung = zylinder(BOHRUNG_R, z_tasche1 - 0.5, z_ende + 2, y=YA)
     kd = KANAL_D_LANG if im_fluegel else KANAL_D       # der lange Kanal im Flügel braucht Luft zum Einschieben
     kanal = trimesh.creation.sweep_polygon(Point(0, 0).buffer(kd / 2, 16), pfad)
-    cut = trimesh.boolean.union([nase, tasche, bohrung, kanal] + fraeser, engine='manifold')
+    kanaele = [kanal]
+    if stutzen_spiegel == 'beide':                       # zweiter Kanal spiegelgleich: der Schlauch kann links oder rechts laufen
+        kanaele.append(spiegeln_x(kanal))
+    cut = trimesh.boolean.union([nase, tasche, bohrung] + kanaele + fraeser, engine='manifold')
     tpu = trimesh.boolean.difference([ausen, cut], engine='manifold')
     return tpu, info
 
@@ -392,13 +395,23 @@ def main():
     ap.add_argument('--z-platte', type=float, default=Z_PLATTE, help='Z der Fußplatten-Rückseite (Nasenspitze: 22,5)')
     ap.add_argument('--kanal-radius', type=float, default=KANAL_BOGEN)
     ap.add_argument('--filet', type=float, default=R_FILET, help='Verrundungsradius der Übergänge, 0 = aus')
-    ap.add_argument('--stutzen', choices=['aus', 'einseitig', 'symmetrisch'], default='symmetrisch',
-                    help='Schlauchstutzen am seitlichen Austritt; symmetrisch = Gegenstutzen ohne Bohrung auf der anderen Seite')
+    ap.add_argument('--stutzen', choices=['aus', 'einseitig', 'symmetrisch', 'beidseitig'], default='symmetrisch',
+                    help='Schlauchstutzen am seitlichen Austritt; symmetrisch = Gegenstutzen ohne Bohrung auf der anderen Seite; beidseitig = auch der Gegenkanal ist gebohrt')
     ap.add_argument('--im-fluegel', action='store_true', help='Schlauchkanal läuft im Flügel bis zum äußeren Rand (nur mit --winkel und seitlichem Austritt)')
     ap.add_argument('--winkel', type=float, default=None, help='Stutzen-Winkel zur -Z-Achse in Grad bei seitlichem Austritt (z. B. 25 = spitz zur Wange); ohne Angabe: quer')
+    ap.add_argument('--wand', type=float, default=None, help='Wandstärke der Schale auf der Nase in mm (Standard 1,2; dünn: 0,8)')
+    ap.add_argument('--fluegel-dicke', type=float, default=None, help='Dicke der Flügel in mm (Standard 2,0; dünn: 1,5)')
+    ap.add_argument('--achse-y', type=float, default=None, help='Höhe der Teleskopachse (Standard −19 = Höhe der Nasenspitze); tiefer macht den Keil auf der Nase dünner')
     a = ap.parse_args()
+    global T_WAND, T_RAND, FL_DICKE, YA
+    if a.achse_y is not None:
+        YA = a.achse_y
+    if a.wand is not None:
+        T_WAND = a.wand; T_RAND = min(T_RAND, a.wand)
+    if a.fluegel_dicke is not None:
+        FL_DICKE = a.fluegel_dicke
     os.makedirs(a.out, exist_ok=True)
-    sp = {'aus': None, 'einseitig': False, 'symmetrisch': True}[a.stutzen]
+    sp = {'aus': None, 'einseitig': False, 'symmetrisch': True, 'beidseitig': 'beide'}[a.stutzen]
     roh, info = baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet, sp, a.winkel, a.im_fluegel)
     if info: print(f"Kanal: erster Bogen {info['psi1']:.0f}°, Abstand Kanalmitte–Haut {info['dist']:.1f} mm, Fußplatte bei Z {info['z_platte']:.1f}" + (f", kleinster Radius {info['radius']:.1f} mm" if 'radius' in info else ''))
     tpu = hauptkoerper(roh)
