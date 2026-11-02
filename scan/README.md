@@ -8,6 +8,7 @@ Nase von Peter, 3D-Scan mit Scaniverse (iPhone), Mesh in Millimetern, Maßstab g
 | `nase_scaniverse_original_m.stl` | Originaldatei aus Scaniverse, Einheit Meter, so wie exportiert |
 | `nase_scan_mm_zentriert.stl` | dasselbe in mm, in die Mitte verschoben (mit dieser Datei arbeitet `code/prothese/anprobe.py` intern) |
 | `nase_mittelschnitt_profil.csv` | Profil der Mittelebene (Y oben, Z nach vorn) |
+| `nase_frau_allgemein_mm.stl` | **keine echte Nase:** Peters Scan, linear verzerrt auf eine Frauennase 49,2 / 31,8 / 27,8 mm (`prothese.py --nase`), zum Ansehen in Fusion |
 | `nase_masse.json` | Messwerte (Peter und aus dem Scan) mit Hinweisen |
 | `fotos/` | Fotos von unten, von der Seite und von vorne (ohne Maßstab) |
 | `archiv/` | erster Scan als Gaussian-Splat (PLY), unbenutzt, nur zur Sicherheit |

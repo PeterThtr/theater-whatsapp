@@ -61,6 +61,33 @@ UNTEN_Z_P = 15.0
 NASEN_UMRISS = [(-19.5, 33), (19.5, 33), (19.5, -35), (-19.5, -35)]   # Bereich des Scans, aus dem der Nasenkörper entsteht
 
 
+# ---- Andere Nase: Peters Scan wird in X, Y, Z linear verzerrt (Option --nase)
+# Bezugswerte von Peters Nase: Messschieber 51,0 (Nasenwurzel–Spitze) und 33,9 (Nasenflügel), Projektion aus dem Scan:
+# Nasenflügelansatz (Furche Nasenflügel/Wange, X ±18, Y −22, Z −10) bis Spitze (Y −19,4, Z 22,5) in der Seitenansicht 32,6.
+# Im Scan: Nasenwurzel (tiefster Punkt) Y 24,4 / Z −6,7, Strecke zur Spitze 52,7 (dY 43,8, dZ 29,2).
+REF_WURZEL_SPITZE, REF_PROJEKTION, REF_BREITE = 51.0, 32.6, 33.9
+REF_SCAN_WURZEL_SPITZE, REF_SCAN_DY, REF_SCAN_DZ = 52.7, 43.8, 29.2
+
+
+def morph_faktoren(wurzel_spitze, projektion, breite):
+    """Faktoren (sx, sy, sz) für Peters Scan: Breite -> X, Projektion -> Z, Nasenwurzel–Spitze -> Y (mit dem schon
+    verzerrten Z, damit die schräge Strecke stimmt). Die Messwerte werden wie Peters Messschieberwerte behandelt."""
+    sx = breite / REF_BREITE
+    sz = projektion / REF_PROJEKTION
+    l_scan = wurzel_spitze * REF_SCAN_WURZEL_SPITZE / REF_WURZEL_SPITZE
+    dy = np.sqrt(max(l_scan ** 2 - (REF_SCAN_DZ * sz) ** 2, 1.0))
+    return sx, dy / REF_SCAN_DY, sz
+
+
+def morph_konstanten(sx, sy, sz):
+    """Alle festen Koordinaten (Umriss, Höhen), die sich auf Peters Scan beziehen, mitverzerren."""
+    global OUTLINE_P, NASEN_UMRISS, UNTEN_Z_P, KEIL_Z_AB, KEIL_Y_BIS, YA
+    A.MORPH = (sx, sy, sz)
+    OUTLINE_P = [(x * sx, y * sy) for x, y in OUTLINE_P]
+    NASEN_UMRISS = [(x * sx, y * sy) for x, y in NASEN_UMRISS]
+    UNTEN_Z_P *= sz; KEIL_Z_AB *= sz; KEIL_Y_BIS *= sy; YA *= sy
+
+
 def kanal_pfad(richtung, z0, radius=None, n=40):
     """Mittellinie des Schlauchkanals: von der Fußrückseite zunächst nach hinten, dann im Bogen weg."""
     R = KANAL_BOGEN if radius is None else radius
@@ -191,7 +218,7 @@ def kanal_pfad_fluegel(scan, z0, richtung, radius, psi_end, ctx, d_min=3.9, ds=0
                     log.append((round(float(psi_e)), round(float(psi1)), sfac, '-', round(float(rad), 1)))
                     continue
                 dist = trimesh.proximity.closest_point(scan, pts[2:])[1]
-                mask = np.abs(pts[2:, 0]) < 19.0                # nur dort, wo der Scan die Haut kennt
+                mask = np.abs(pts[2:, 0]) < 19.0 * A.MORPH[0]               # nur dort, wo der Scan die Haut kennt
                 dmin = dist[mask].min() if mask.any() else 99.0
                 log.append((round(float(psi_e)), round(float(psi1)), sfac, round(float(dmin), 1), round(float(rad), 1)))
                 if dmin >= d_min:
@@ -406,10 +433,20 @@ def main():
     ap.add_argument('--wand', type=float, default=None, help='Wandstärke der Schale auf der Nase in mm (Standard 1,2; dünn: 0,8)')
     ap.add_argument('--fluegel-dicke', type=float, default=None, help='Dicke der Flügel in mm (Standard 2,0; dünn: 1,5)')
     ap.add_argument('--achse-y', type=float, default=None, help='Höhe der Teleskopachse (Standard −19 = Höhe der Nasenspitze); tiefer macht den Keil auf der Nase dünner')
+    ap.add_argument('--nase', default=None, help='andere Nase: "Nasenwurzel–Spitze,Projektion,Breite" in mm (Messschieber), '
+                    'z. B. 49.2,31.8,27.8; Projektion = Nasenflügelansatz bis Spitze in der Seitenansicht')
+    ap.add_argument('--spiel', type=float, default=None, help='Abstand Schale–Haut in mm (Standard 0,15)')
     a = ap.parse_args()
     global T_WAND, T_RAND, FL_DICKE, YA
+    if a.nase:
+        w, pj, b = (float(v) for v in a.nase.split(','))
+        sx, sy, sz = morph_faktoren(w, pj, b)
+        morph_konstanten(sx, sy, sz)
+        print(f"Nase {w}/{pj}/{b} mm: Verzerrung des Scans X {sx:.3f}, Y {sy:.3f}, Z {sz:.3f}; Teleskopachse Y {YA:.1f}")
+    if a.spiel is not None:
+        A.SPIEL = a.spiel
     if a.achse_y is not None:
-        YA = a.achse_y
+        YA = a.achse_y * (A.MORPH[1] if a.nase else 1.0)
     if a.wand is not None:
         T_WAND = a.wand; T_RAND = min(T_RAND, a.wand)
     if a.fluegel_dicke is not None:

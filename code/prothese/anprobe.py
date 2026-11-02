@@ -47,6 +47,7 @@ LAPPEN_B = 15.0        # Halbachse des Lappens quer zur Achse (Höhe 28 mm)
 SCHLITZ_DV = 5.0       # Schlitz liegt so viel höher als die Flügelachse (unten läuft der Schlauchwulst)
 SCHLITZ_DY_ALT = 4.0       # Schlitz liegt um so viel höher als die Flügelmitte (unten bleibt Platz für den Schlauchwulst)
 R_KOPF = 75.0          # angenommener Krümmungsradius der Kopfseite (Flügel biegen sich nach hinten)
+MORPH = (1.0, 1.0, 1.0)  # Verzerrung des Scans in X, Y, Z (nach dem Zentrieren), für andere Nasen (siehe prothese.py --nase)
 
 
 def lade(pfad, skala):
@@ -54,6 +55,8 @@ def lade(pfad, skala):
     m.apply_scale(1000.0)
     m.apply_translation(-m.bounds.mean(0))
     m.apply_scale(skala)
+    if tuple(MORPH) != (1.0, 1.0, 1.0):
+        m.apply_transform(np.diag([MORPH[0], MORPH[1], MORPH[2], 1.0]))
     return m
 
 
@@ -65,7 +68,7 @@ def waehle_flaechen(m, skala, outline=None, unten_frei=True):
     poly = Path(np.array(OUTLINE if outline is None else outline, float) * skala)
     sel = poly.contains_points(c[:, :2])
     # Unterseite der Spitze / Nasenlöcher: nur der größte zusammenhängende Bereich wird entfernt
-    u = np.where(sel & (c[:, 1] < UNTEN_Y * skala) & (n[:, 1] < UNTEN_NY) & (c[:, 2] < UNTEN_Z * skala))[0] if unten_frei else []
+    u = np.where(sel & (c[:, 1] < UNTEN_Y * skala * MORPH[1]) & (n[:, 1] < UNTEN_NY) & (c[:, 2] < UNTEN_Z * skala))[0] if unten_frei else []
     if len(u):
         adj = m.face_adjacency
         keep = np.isin(adj[:, 0], u) & np.isin(adj[:, 1], u)
@@ -171,7 +174,7 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, sch
     t_wand = T_WAND if t_wand is None else t_wand
     fl_dicke = FL_DICKE if fl_dicke is None else fl_dicke
     H0 = band_b + 8.0                       # Höhe an der Wurzel
-    yc = FL_Y * skala
+    yc = FL_Y * skala * MORPH[1]
     foot = Polygon(np.array(OUTLINE, float) * skala)
     lin = LinearNDInterpolator(V[:, :2], V[:, 2]); nea = NearestNDInterpolator(V[:, :2], V[:, 2])
 
@@ -185,7 +188,7 @@ def baue_fluegel(V, N, rv, seite, skala, band_b, t_wand=None, fl_dicke=None, sch
         k = round(float(y) * 4) / 4
         if k not in cache:
             seg = LineString([(0, k), (seite * 200, k)]).intersection(foot)
-            cache[k] = abs(seg.bounds[0] if seite < 0 else seg.bounds[2]) if not seg.is_empty else 15.0 * skala
+            cache[k] = abs(seg.bounds[0] if seite < 0 else seg.bounds[2]) if not seg.is_empty else 15.0 * skala * MORPH[0]
         return cache[k]
 
     # Randwerte entlang Y vorab bestimmen und glätten (der Scanrand ist unruhig, das soll nicht in den Flügel wandern)
