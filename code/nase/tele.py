@@ -1,4 +1,4 @@
-"""Teleskop-Nase V2: 5 Segmente, integrierte Bünde (unten aussen) und Lippen (oben innen),
+"""Teleskop-Nase V2: 5 Segmente (Profil draht6: 6 Segmente ohne Ringe), integrierte Bünde (unten aussen) und Lippen (oben innen),
 aufgeklebte Anschlagringe (oben, für das Einziehen), Kappe mit Knotenfenster, Fuss mit Flügeln.
 Koordinaten: z = Achse, z=0 = Oberseite Fussplatte = Unterkante Segment 1. Masse in mm.
 """
@@ -7,22 +7,27 @@ import cadquery as cq
 
 # Profil: "feder" (Druckfeder + Schnur, Bohrung Ø 10,8 in Segment 5) oder "draht" (Schub-Zug-Draht Ø 1,5, viel schlanker).
 # Umschalten per Umgebungsvariable: TELE_PROFIL=draht python3 export_all.py
+# "draht6": 6 Segmente bei gleichem Segment 1 (Außen-Ø 19,8, passt in die gedruckte Prothese), Wand 0,8, Ringspalt 0,6,
+# ohne Ringe (eingefahren stehen alle Segmente unten am Anschlag), kürzere Segmente bei gleichem Hub.
 PROFIL = os.environ.get("TELE_PROFIL", "feder")
-DRAHT = PROFIL == "draht"
+DRAHT6 = PROFIL == "draht6"
+DRAHT = PROFIL in ("draht", "draht6")
+N = 6 if DRAHT6 else 5           # Anzahl Segmente
+RINGE = not DRAHT6               # aufgeklebte Ringe zum geordneten Einziehen
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 os.makedirs(OUT, exist_ok=True)
 
 # ---------- Parameter
 S = 0.15          # radiales Spiel an Lippe und Bund
-G = 0.8           # Ringspalt zwischen Rohr k+1 aussen und Rohr k innen
+G = 0.6 if DRAHT6 else 0.8   # Ringspalt zwischen Rohr k+1 aussen und Rohr k innen
 C = G - S         # Bundüberstand = Lippenüberstand (0.65)
 BAND = 5.0        # Lippenlänge (gerade)
 CH = 10.0         # Bundhöhe
 FUN = 0.6         # Einlauffase innen unten (Feder)
-L = 62.0          # Länge Segmente 2..5
-L1 = 63.5         # Länge Segment 1
-W = [None, 1.2, 1.0, 1.0, 1.0, 0.8 if DRAHT else 1.0]   # Wandstärken
+L = 52.5 if DRAHT6 else 62.0      # Länge Segmente 2..N (draht6: 5 Fugen × 37,2 = 186 mm Hub)
+L1 = L if DRAHT6 else 63.5         # Länge Segment 1 (ohne Ring 2 braucht es keine Überlänge)
+W = [None, 1.2, 0.8, 0.8, 0.8, 0.8, 0.8] if DRAHT6 else [None, 1.2, 1.0, 1.0, 1.0, 0.8 if DRAHT else 1.0]   # Wandstärken
 RI5 = 1.7 if DRAHT else 5.4   # Bohrung Segment 5: Draht Ø 1,5 (Ø 3,4 Bohrung) bzw. Feder AD 10
 WT = 1.2          # Ringdicke
 WC = 0.7          # Ringfase / Senkung
@@ -36,9 +41,9 @@ OF_DICKE = 0.8    # Dicke der Scheibe
 OF_BREITE = 7.0   # Scheibe reicht bis Bund-Radius + OF_BREITE
 
 # Radien von innen nach aussen
-RI = [None] * 6; RO = [None] * 6
-RI[5] = RI5; RO[5] = RI5 + W[5]
-for k in (4, 3, 2, 1):
+RI = [None] * (N + 1); RO = [None] * (N + 1)
+RI[N] = RI5; RO[N] = RI5 + W[N]
+for k in range(N - 1, 0, -1):
     RI[k] = RO[k + 1] + G
     RO[k] = RI[k] + W[k]
 
@@ -60,7 +65,7 @@ def segment(k, opfer=False, fase=None):
     else:
         p += [(ri + FUN, 0.0), (ri, FUN)]
     # innen hoch
-    if k <= 4:
+    if k <= N - 1:
         rl = RO[k + 1] + S          # Lippenbohrung
         p += [(ri, Lk - BAND - C), (rl, Lk - BAND)]
         if k == 1:
@@ -102,7 +107,7 @@ def ring(k):
     return revolve(p)
 
 
-CAP_R = RO[5] + WC     # 7.1
+CAP_R = RO[N] + WC     # 7.1
 SHAFT_R = RI5 - 0.1
 SHAFT_BOT = -7.95
 
@@ -110,7 +115,7 @@ SHAFT_BOT = -7.95
 def cap():
     # z=0 = Stirnfläche Segment 5
     p = [(0, SHAFT_BOT), (SHAFT_R - 0.3, SHAFT_BOT), (SHAFT_R, SHAFT_BOT + 0.3),
-         (SHAFT_R, -0.65), (RI5 + 0.6, GLUE), (RO[5], GLUE), (CAP_R, GLUE + WC), (CAP_R, 1.05)]
+         (SHAFT_R, -0.65), (RI5 + 0.6, GLUE), (RO[N], GLUE), (CAP_R, GLUE + WC), (CAP_R, 1.05)]
     z0 = 1.05
     n = 24
     for i in range(1, n + 1):
@@ -172,7 +177,7 @@ def foot(wings=True):
     cup = revolve([(CUP_RI, 0.0), (CUP_RO, 0.0), (CUP_RO, CUP_H - 0.3), (CUP_RO - 0.3, CUP_H),
                    (CUP_RI + 0.3, CUP_H), (CUP_RI, CUP_H - 0.3)])
     boss = revolve([(0.0, 0.0), (BOSS_R, 0.0), (BOSS_R, BOSS_H - 0.4), (BOSS_R - 0.4, BOSS_H), (0.0, BOSS_H)])
-    s = plate.fuse(cup).fuse(boss)
+    s = plate.fuse(cup) if DRAHT6 else plate.fuse(cup).fuse(boss)   # draht6: kein Dorn (Fuß nur Anschlagebene, Segment 6 steht unten auf)
     hr = 0.9 if DRAHT else 0.75                  # Loch für Draht Ø 1,8 bzw. Schnur Ø 1,5
     hole = cq.Workplane("XY").workplane(offset=-PLATE_T - 1).circle(hr).extrude(PLATE_T + BOSS_H + 2).val()
     fun_top = cq.Solid.makeCone(hr, hr + 0.55, 0.55, cq.Vector(0, 0, BOSS_H - 0.55), cq.Vector(0, 0, 1))
@@ -183,6 +188,8 @@ def foot(wings=True):
 # ---------- Positionen
 def tops_retracted():
     """Unterkanten B[k] eingefahren."""
+    if not RINGE:                 # ohne Ringe: alle Segmente stehen unten auf dem Anschlag (Fußplatte bzw. Taschenboden)
+        return {k: 0.0 for k in range(1, N + 1)}
     T = {1: L1}
     T[2] = L1 - WC - S   # Ring 2 (Unterkante = T2+GLUE) sitzt mit GLUE Abstand in der Senkung von Segment 1
     T[3] = T[2] + (WT - WC) - WB + GLUE  # = +0.35
@@ -205,17 +212,18 @@ def assembly(extended=False, gap=0.0):
     B = tops_retracted()
     if extended:
         Bx = {1: 0.0}
-        for k in (2, 3, 4, 5):
+        for k in range(2, N + 1):
             Bx[k] = Bx[k - 1] + stop_offset(k - 1) - gap
         B = Bx
     parts = {}
     parts["fuss"] = foot().translate(cq.Vector(0, 0, 0))
-    for k in (1, 2, 3, 4, 5):
+    for k in range(1, N + 1):
         parts[f"seg{k}"] = segment(k).translate(cq.Vector(0, 0, B[k]))
-    for k in (2, 3, 4):
-        top = B[k] + L
-        parts[f"ring{k}"] = ring(k).translate(cq.Vector(0, 0, top + GLUE))
-    parts["kappe"] = cap().translate(cq.Vector(0, 0, B[5] + L))
+    if RINGE:
+        for k in range(2, N):
+            top = B[k] + L
+            parts[f"ring{k}"] = ring(k).translate(cq.Vector(0, 0, top + GLUE))
+    parts["kappe"] = cap().translate(cq.Vector(0, 0, B[N] + L))
     return parts, B
 
 
@@ -231,9 +239,9 @@ def export(shape, name, rot=None):
 
 
 if __name__ == "__main__":
-    for k in range(1, 6):
+    for k in range(1, N + 1):
         print(f"Seg {k}: RI {RI[k]:.2f}  RO {RO[k]:.2f}  (Ø {2*RO[k]:.1f})", end="")
         if k >= 2: print(f"  Bund Ø {2*(RO[k]+C):.2f}", end="")
-        if k <= 4: print(f"  Lippe Ø {2*(RO[k+1]+S):.2f}", end="")
+        if k <= N - 1: print(f"  Lippe Ø {2*(RO[k+1]+S):.2f}", end="")
         print()
-    print("Hub je Fuge:", [round(stop_offset(k) - (tops_retracted()[k + 1] - tops_retracted()[k]), 2) for k in (1, 2, 3, 4)])
+    print("Hub je Fuge:", [round(stop_offset(k) - (tops_retracted()[k + 1] - tops_retracted()[k]), 2) for k in range(1, N)])
