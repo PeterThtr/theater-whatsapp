@@ -10,10 +10,15 @@ import cadquery as cq
 # "draht6": 6 Segmente bei gleichem Segment 1 (Außen-Ø 19,8, passt in die gedruckte Prothese), Wand 0,8, Ringspalt 0,6,
 # ohne Ringe (eingefahren stehen alle Segmente unten am Anschlag), kürzere Segmente bei gleichem Hub.
 PROFIL = os.environ.get("TELE_PROFIL", "feder")
+# "draht2": 5 Segmente wie "draht", aber ohne Ringe und Fuß, mit breiter Halbkugel-Kappe (nimmt beim Einziehen alle
+# Segmente mit) und mehr Spiel an der Fuge Segment 3/4 (Peter, 3.11.: dort zu viel Reibung).
 DRAHT6 = PROFIL == "draht6"
-DRAHT = PROFIL in ("draht", "draht6")
+DRAHT2 = PROFIL == "draht2"
+DRAHT = PROFIL in ("draht", "draht6", "draht2")
 N = 6 if DRAHT6 else 5           # Anzahl Segmente
-RINGE = not DRAHT6               # aufgeklebte Ringe zum geordneten Einziehen
+RINGE = not (DRAHT6 or DRAHT2)   # aufgeklebte Ringe zum geordneten Einziehen
+FUSS = RINGE                     # ohne Ringe: kein Fuß, der Taschenboden der Prothese ist der Anschlag
+KAPPE_BREIT = DRAHT6 or DRAHT2   # breite Kappe statt Ringe
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 os.makedirs(OUT, exist_ok=True)
@@ -22,6 +27,12 @@ os.makedirs(OUT, exist_ok=True)
 S = 0.15          # radiales Spiel an Lippe und Bund
 G = 0.6 if DRAHT6 else 0.8   # Ringspalt zwischen Rohr k+1 aussen und Rohr k innen
 C = G - S         # Bundüberstand = Lippenüberstand (0.65)
+S_FUGE = {3: 0.25} if DRAHT2 else {}   # abweichendes radiales Spiel je Fuge k/k+1 (draht2: Fuge 3/4)
+
+
+def spiel(k):
+    """Radiales Spiel an der Fuge zwischen Segment k (außen) und k+1 (innen)."""
+    return S_FUGE.get(k, S)
 BAND = 5.0        # Lippenlänge (gerade)
 CH = 10.0         # Bundhöhe
 FUN = 0.6         # Einlauffase innen unten (Feder)
@@ -56,7 +67,7 @@ def segment(k, opfer=False, fase=None):
     """opfer=True: mit Opferfuss (druckfertig). fase: Aussenfase unten (Standard 0.3, mit Opferfuss OF_FASE)."""
     if fase is None:
         fase = OF_FASE if opfer else 0.3
-    Lk = L1 if k == 1 else L
+    Lk = L1 if k == 1 else (L + KAPPE_MUFFE if (KAPPE_BREIT and k == N) else L)
     ri, ro = RI[k], RO[k]
     p = []
     # innen unten
@@ -66,8 +77,8 @@ def segment(k, opfer=False, fase=None):
         p += [(ri + FUN, 0.0), (ri, FUN)]
     # innen hoch
     if k <= N - 1:
-        rl = RO[k + 1] + S          # Lippenbohrung
-        p += [(ri, Lk - BAND - C), (rl, Lk - BAND)]
+        rl = RO[k + 1] + spiel(k)   # Lippenbohrung
+        p += [(ri, Lk - BAND - (ri - rl)), (rl, Lk - BAND)]     # 45°-Kegel, Überstand ri - rl (= C bei Standardspiel)
         if k == 1:
             p += [(rl, Lk - WC), (rl + WC, Lk)]      # Senkung für Ring 2
         else:
@@ -80,8 +91,9 @@ def segment(k, opfer=False, fase=None):
         p += [(ro, fase), (ro - fase, 0.0)]
         rb = ro
     else:
-        p += [(ro, CH + C), (ro + C, CH), (ro + C, fase), (ro + C - fase, 0.0)]
-        rb = ro + C
+        cb = G - spiel(k - 1)       # Bundüberstand an der Fuge k-1/k
+        p += [(ro, CH + cb), (ro + cb, CH), (ro + cb, fase), (ro + cb - fase, 0.0)]
+        rb = ro + cb
     s = revolve(p)
     if opfer:
         s = s.fuse(opferfuss(rb, fase))
@@ -108,11 +120,36 @@ def ring(k):
 
 
 CAP_R = RO[N] + WC     # 7.1
+# draht2/draht6: breite Halbkugel-Kappe, die beim Einziehen alle Segmente 2..N-1 mitnimmt (Ø = Segment 2 außen).
+# Statt Zapfen eine Muffe: das innerste Segment (um KAPPE_MUFFE länger) steckt darin; flache Seite liegt auf der Druckplatte.
+KAPPE_R = RO[2] if KAPPE_BREIT else None   # draht6: 8,1 -> Ø 16,2; draht2: 7,9 -> Ø 15,8
+KAPPE_MUFFE = 3.0                     # Tiefe der Muffe = Überlänge von Segment 6
+KAPPE_BAND = 0.6                      # zylindrischer Rand unter der Halbkugel
 SHAFT_R = RI5 - 0.1
 SHAFT_BOT = -7.95
 
 
+def cap_breit():
+    """z = 0 = flache Unterseite (liegt eingefahren auf den Stirnflächen von Segment 2..N-1)."""
+    R = KAPPE_R
+    p = [(RO[N] + GLUE + 0.3, 0.0), (R - 0.3, 0.0), (R, 0.3), (R, KAPPE_BAND)]
+    n = 32
+    for i in range(1, n + 1):
+        a = math.radians(90 * i / n)
+        p.append((R * math.cos(a), KAPPE_BAND + R * math.sin(a)))
+    p[-1] = (0.0, KAPPE_BAND + R)
+    rm = RO[N] + GLUE                       # Muffe Ø 5,1 für Segment 6 (Klebespalt 0,05)
+    p += [(0.0, KAPPE_MUFFE), (rm, KAPPE_MUFFE), (rm, 0.3)]
+    s = revolve(p)
+    # Sackloch Ø 1,7 für den Draht vom Muffenboden nach oben (1,2 mm Restwand unter dem Scheitel)
+    top = KAPPE_BAND + R - 1.2
+    hole = cq.Workplane("XY").workplane(offset=KAPPE_MUFFE - 0.1).circle(0.85).extrude(top - KAPPE_MUFFE + 0.1).val()
+    return s.cut(hole)
+
+
 def cap():
+    if KAPPE_BREIT:
+        return cap_breit()
     # z=0 = Stirnfläche Segment 5
     p = [(0, SHAFT_BOT), (SHAFT_R - 0.3, SHAFT_BOT), (SHAFT_R, SHAFT_BOT + 0.3),
          (SHAFT_R, -0.65), (RI5 + 0.6, GLUE), (RO[N], GLUE), (CAP_R, GLUE + WC), (CAP_R, 1.05)]
@@ -177,7 +214,7 @@ def foot(wings=True):
     cup = revolve([(CUP_RI, 0.0), (CUP_RO, 0.0), (CUP_RO, CUP_H - 0.3), (CUP_RO - 0.3, CUP_H),
                    (CUP_RI + 0.3, CUP_H), (CUP_RI, CUP_H - 0.3)])
     boss = revolve([(0.0, 0.0), (BOSS_R, 0.0), (BOSS_R, BOSS_H - 0.4), (BOSS_R - 0.4, BOSS_H), (0.0, BOSS_H)])
-    s = plate.fuse(cup) if DRAHT6 else plate.fuse(cup).fuse(boss)   # draht6: kein Dorn (Fuß nur Anschlagebene, Segment 6 steht unten auf)
+    s = plate.fuse(cup) if not FUSS else plate.fuse(cup).fuse(boss)   # ohne Fuß (draht2/6): kein Dorn (Fuß nur Anschlagebene, Segment 6 steht unten auf)
     hr = 0.9 if DRAHT else 0.75                  # Loch für Draht Ø 1,8 bzw. Schnur Ø 1,5
     hole = cq.Workplane("XY").workplane(offset=-PLATE_T - 1).circle(hr).extrude(PLATE_T + BOSS_H + 2).val()
     fun_top = cq.Solid.makeCone(hr, hr + 0.55, 0.55, cq.Vector(0, 0, BOSS_H - 0.55), cq.Vector(0, 0, 1))
@@ -205,7 +242,8 @@ def stop_offset(k_outer):
     """Unterkante innen minus Unterkante aussen, wenn Bundkegel auf Lippenkegel liegt."""
     Lk = L1 if k_outer == 1 else L
     # Bundkegel: z = Bi + CH + (RO_i + C - r);  Lippenkegel: z = Ba + Lk - BAND - C + (RI_a - r), RI_a = RO_i + G
-    return Lk - BAND - C + G - CH - C
+    c = G - spiel(k_outer)
+    return Lk - BAND - c + G - CH - c
 
 
 def assembly(extended=False, gap=0.0):
@@ -241,7 +279,7 @@ def export(shape, name, rot=None):
 if __name__ == "__main__":
     for k in range(1, N + 1):
         print(f"Seg {k}: RI {RI[k]:.2f}  RO {RO[k]:.2f}  (Ø {2*RO[k]:.1f})", end="")
-        if k >= 2: print(f"  Bund Ø {2*(RO[k]+C):.2f}", end="")
-        if k <= N - 1: print(f"  Lippe Ø {2*(RO[k+1]+S):.2f}", end="")
+        if k >= 2: print(f"  Bund Ø {2*(RO[k]+G-spiel(k-1)):.2f}", end="")
+        if k <= N - 1: print(f"  Lippe Ø {2*(RO[k+1]+spiel(k)):.2f}", end="")
         print()
     print("Hub je Fuge:", [round(stop_offset(k) - (tops_retracted()[k + 1] - tops_retracted()[k]), 2) for k in range(1, N)])
