@@ -368,7 +368,8 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     # Hülse mit gerundeter Vorderkante
     z_seg0 = z_platte + FUSS_PLATTE
     z_ende = z_seg0 + HUELSE_LAENGE
-    prof = np.array([[0, z_start - 1], [HUELSE_R, z_start - 1], [HUELSE_R, z_ende - 1.5], [HUELSE_R - 1.5, z_ende], [0, z_ende]])
+    fa = min(1.5, 0.5 * (HUELSE_R - BOHRUNG_R))          # Fase an der Vorderkante, bei dünner Wand kleiner
+    prof = np.array([[0, z_start - 1], [HUELSE_R, z_start - 1], [HUELSE_R, z_ende - fa], [HUELSE_R - fa, z_ende], [0, z_ende]])
     huelse = trimesh.creation.revolve(prof, sections=128)
     huelse.apply_translation([0, YA, 0])
     teile += [keil, huelse]
@@ -471,6 +472,8 @@ def main():
     ap.add_argument('--kanal-gerade', default=None, help='flacher Kanal für steifen Draht: "Radius,Richtung,Bogen" in mm/Grad, '
                     'z. B. 45,20,60 (Richtung 0 = seitlich, 90 = nach unten); mit --austritt links|rechts, ohne --winkel/--im-fluegel')
     ap.add_argument('--huelse-laenge', type=float, default=None, help='Länge der Hülse um Segment 1 ab Segmentanfang (Standard 45)')
+    ap.add_argument('--huelse-wand', type=float, default=None, help='Wandstärke der Hülse über der Bohrung (Standard: so dick, dass der Fußbecher hineinpasst, 3,1)')
+    ap.add_argument('--ohne-tasche', action='store_true', help='ohne Fußtasche: Bohrung für Segment 1 bis zum Boden (ohne Fuß, mit Federscheibe)')
     ap.add_argument('--kanal-d', type=float, default=None, help='Durchmesser des Schlauchkanals im Flügel (Standard 4,15; TPU druckt Kanäle enger, 4,5 schont den Schlauch)')
     ap.add_argument('--filet', type=float, default=R_FILET, help='Verrundungsradius der Übergänge, 0 = aus')
     ap.add_argument('--stutzen', choices=['aus', 'einseitig', 'symmetrisch', 'beidseitig'], default='symmetrisch',
@@ -486,7 +489,13 @@ def main():
                     'z. B. 49.2,31.8,27.8; Projektion = Nasenflügelansatz bis Spitze in der Seitenansicht')
     ap.add_argument('--spiel', type=float, default=None, help='Abstand Schale–Haut in mm (Standard 0,15)')
     a = ap.parse_args()
-    global T_WAND, T_RAND, FL_DICKE, YA, KANAL_D_LANG, HUELSE_LAENGE
+    global T_WAND, T_RAND, FL_DICKE, YA, KANAL_D_LANG, HUELSE_LAENGE, HUELSE_R, TASCHE_R
+    if a.ohne_tasche:
+        TASCHE_R = BOHRUNG_R
+    if a.huelse_wand is not None:
+        HUELSE_R = BOHRUNG_R + a.huelse_wand
+        if not a.ohne_tasche and HUELSE_R < TASCHE_R + 1.0:
+            raise SystemExit('Hülse zu dünn für die Fußtasche, mit --ohne-tasche rechnen')
     if a.huelse_laenge is not None:
         HUELSE_LAENGE = a.huelse_laenge
     if a.kanal_d is not None:
