@@ -157,10 +157,14 @@ def cap_breit(schnur=False):
 def federscheibe():
     """PETG-Scheibe für den Taschenboden der Prothese (Feder + Schnur): Auflage der Feder und harter Anschlag der
     Segmente beim Einfahren. Ø 18,8 passt von vorn durch die Prothesenbohrung Ø 19,3. Mitte: Loch Ø 1,5 für die
-    Schnur mit Einlauf unten, oben eine Mulde Ø 3,4 × 0,4, die das Federende zentriert."""
+    Schnur mit Einlauf unten, oben eine Mulde Ø 3,4 × 0,4 und ein Mittelstift Ø 2,0 × 2,5, der in die Feder
+    (Außen-Ø 3,0, innen etwa 2,3) ragt und sie unten festhält. Schnurloch Ø 1,0 durch den Stift (Schnur bis etwa 0,6)."""
     t, r = 1.2, 9.4
-    s = revolve([(0.75, 0.0), (r - 0.3, 0.0), (r, 0.3), (r, t), (1.7, t), (1.7, t - 0.4), (0.75, t - 0.4)])
-    fun = cq.Solid.makeCone(1.25, 0.75, 0.5, cq.Vector(0, 0, -0.01), cq.Vector(0, 0, 1))
+    rs, hs, rl = 1.0, 2.5, 0.5          # Stift-Radius, Stifthöhe über der Mulde, Schnurloch-Radius
+    zm = t - 0.4                        # Boden der Mulde
+    s = revolve([(rl, 0.0), (r - 0.3, 0.0), (r, 0.3), (r, t), (1.7, t), (1.7, zm), (rs, zm),
+                 (rs, zm + hs - 0.3), (rs - 0.3, zm + hs), (rl, zm + hs)])
+    fun = cq.Solid.makeCone(1.0, rl, 0.5, cq.Vector(0, 0, -0.01), cq.Vector(0, 0, 1))
     return s.cut(fun)
 
 
