@@ -147,6 +147,29 @@ def kanal_pfad_spitz(scan, z0, richtung, radius=None, psi_end=25.0, d_min=3.9, d
     return pts, h, np.vstack([pts, ext]), dict(psi1=psi1, dist=dist)
 
 
+def kanal_pfad_gerade(scan, z0, richtung, radius, alpha, phi, d_min=4.0, ds=0.5, gerade=12.0):
+    """Flacher Kanal für einen steifen Schubdraht: von der Fußplatte zuerst in der Achse nach hinten, dann EIN Bogen
+    mit großem Radius (Draht 1,5 mm Federstahl lief im Test bei R 45 gut) seitlich bzw. schräg nach unten (alpha:
+    0 = seitlich, 90 = nach unten) um phi Grad, danach ein gerades Stück. Der Kanal bleibt überall mindestens d_min
+    von der Haut (nur dort geprüft, wo der Scan die Haut kennt)."""
+    sgn = -1.0 if richtung == 'links' else 1.0
+    a = np.radians(alpha)
+    u = np.array([sgn * np.cos(a), -np.sin(a), 0.0])
+    ph = np.arange(0.0, np.radians(phi) + 1e-9, ds / radius)
+    P = np.array([0.0, YA, z0]) + np.outer(radius * (1 - np.cos(ph)), u) + np.outer(-radius * np.sin(ph), [0.0, 0.0, 1.0])
+    tg = np.sin(ph[-1]) * u - np.cos(ph[-1]) * np.array([0.0, 0.0, 1.0])
+    Q = P[-1] + np.outer(np.arange(ds, gerade + 1e-9, ds), tg)
+    pts = np.vstack([[[0.0, YA, z0 + 1.5]], P, Q])
+    xmax = np.abs(scan.vertices[:, 0]).max() - 1.0
+    d = trimesh.proximity.closest_point(scan, pts[1:])[1]
+    inn = np.abs(pts[1:, 0]) < xmax
+    dmin = float(d[inn].min()) if inn.any() else 99.0
+    if dmin < d_min:
+        raise RuntimeError('Kanal zu nah an der Haut')
+    ext = pts[-1] + np.outer(np.linspace(1, 30, 15), tg)
+    return pts, tg, np.vstack([pts, ext]), dict(psi1=float(phi), dist=dmin, radius=float(radius))
+
+
 def kanal_pfad_fluegel(scan, z0, richtung, radius, psi_end, ctx, d_min=3.9, ds=0.5):
     """Schlauchkanal, der um die Nasenspitze läuft und dann im Flügel bis zum äußeren Rand weiterläuft
     (Wulst auf der Außenfläche des Flügels, unter dem Schlitz hindurch). Der Schlauch tritt erst am Flügelende aus.
@@ -282,7 +305,7 @@ def verrunden(m, r, pitch=0.6, sigma=1.0, level=0.7):
 
 
 def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=None, stutzen_spiegel=True, winkel=None,
-         im_fluegel=False, holz=0.0, holz_stil='fein'):
+         im_fluegel=False, holz=0.0, holz_stil='fein', gerade=None):
     z_platte = Z_PLATTE if z_platte is None else z_platte
     kanal_radius = KANAL_BOGEN if kanal_radius is None else kanal_radius
     filet = R_FILET if filet is None else filet
@@ -299,7 +322,18 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     ctx = None
     if seite_k is not None and (winkel is not None or im_fluegel):
         _, _, ctx = A.baue_fluegel(V, N, rv, seite_k, skala, band, t_wand=T_WAND, fl_dicke=FL_DICKE, schlitz_im_koerper=False)
-    if seite_k is not None and winkel is not None:
+    if seite_k is not None and gerade is not None:
+        R_g, alpha_g, phi_g = gerade
+        for zp in np.arange(z_platte, z_platte + 60.1, 0.5):
+            try:
+                pfad_spitz = kanal_pfad_gerade(m, zp, austritt, R_g, alpha_g, phi_g)
+                z_platte = float(zp)
+                break
+            except RuntimeError:
+                continue
+        if pfad_spitz is None:
+            raise RuntimeError('kein gerader Kanalpfad gefunden')
+    elif seite_k is not None and winkel is not None:
         # Fußplatte so weit nach vorn schieben, wie der Kanal mit seiner Wand um die Nasenspitze herum braucht
         for zp in np.arange(z_platte, z_platte + 14.1, 0.5):
             try:
@@ -372,7 +406,7 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
     z_tasche1 = z_seg0 + FUSS_BECHER + 0.2
     tasche = zylinder(TASCHE_R, z_tasche0, z_tasche1, y=YA)
     bohrung = zylinder(BOHRUNG_R, z_tasche1 - 0.5, z_ende + 2, y=YA)
-    kd = KANAL_D_LANG if im_fluegel else KANAL_D       # der lange Kanal im Flügel braucht Luft zum Einschieben
+    kd = KANAL_D_LANG if (im_fluegel or gerade is not None) else KANAL_D       # der lange Kanal im Flügel braucht Luft zum Einschieben
     kanal = trimesh.creation.sweep_polygon(Point(0, 0).buffer(kd / 2, 16), pfad)
     kanaele = [kanal]
     if stutzen_spiegel == 'beide':                       # zweiter Kanal spiegelgleich: der Schlauch kann links oder rechts laufen
@@ -434,6 +468,8 @@ def main():
     ap.add_argument('--austritt', default='unten', choices=['unten', 'links', 'rechts'])
     ap.add_argument('--z-platte', type=float, default=Z_PLATTE, help='Z der Fußplatten-Rückseite (Nasenspitze: 22,5)')
     ap.add_argument('--kanal-radius', type=float, default=KANAL_BOGEN)
+    ap.add_argument('--kanal-gerade', default=None, help='flacher Kanal für steifen Draht: "Radius,Richtung,Bogen" in mm/Grad, '
+                    'z. B. 45,20,60 (Richtung 0 = seitlich, 90 = nach unten); mit --austritt links|rechts, ohne --winkel/--im-fluegel')
     ap.add_argument('--kanal-d', type=float, default=None, help='Durchmesser des Schlauchkanals im Flügel (Standard 4,15; TPU druckt Kanäle enger, 4,5 schont den Schlauch)')
     ap.add_argument('--filet', type=float, default=R_FILET, help='Verrundungsradius der Übergänge, 0 = aus')
     ap.add_argument('--stutzen', choices=['aus', 'einseitig', 'symmetrisch', 'beidseitig'], default='symmetrisch',
@@ -467,7 +503,8 @@ def main():
         FL_DICKE = a.fluegel_dicke
     os.makedirs(a.out, exist_ok=True)
     sp = {'aus': None, 'einseitig': False, 'symmetrisch': True, 'beidseitig': 'beide'}[a.stutzen]
-    roh, info = baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet, sp, a.winkel, a.im_fluegel, a.holz, a.holz_stil)
+    roh, info = baue(a.scan, a.scale, a.band, a.austritt, a.z_platte, a.kanal_radius, a.filet, sp, a.winkel, a.im_fluegel, a.holz, a.holz_stil,
+                    tuple(float(v) for v in a.kanal_gerade.split(',')) if a.kanal_gerade else None)
     for p, rl, ti in info.get('aeste', []):
         print(f"{'Astloch' if ti > 0 else 'Ast (geschlossen)'} bei X {p[0]:.1f} Y {p[1]:.1f} Z {p[2]:.1f}: Ø {2 * rl:.1f}" + (f", Tiefe {ti:.2f} mm" if ti > 0 else ''))
     if info.get('psi1') is not None: print(f"Kanal: erster Bogen {info['psi1']:.0f}°, Abstand Kanalmitte–Haut {info['dist']:.1f} mm, Fußplatte bei Z {info['z_platte']:.1f}" + (f", kleinster Radius {info['radius']:.1f} mm" if 'radius' in info else ''))
