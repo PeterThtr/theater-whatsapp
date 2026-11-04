@@ -470,6 +470,7 @@ def main():
     ap.add_argument('--kanal-radius', type=float, default=KANAL_BOGEN)
     ap.add_argument('--kanal-gerade', default=None, help='flacher Kanal für steifen Draht: "Radius,Richtung,Bogen" in mm/Grad, '
                     'z. B. 45,20,60 (Richtung 0 = seitlich, 90 = nach unten); mit --austritt links|rechts, ohne --winkel/--im-fluegel')
+    ap.add_argument('--huelse-laenge', type=float, default=None, help='Länge der Hülse um Segment 1 ab Segmentanfang (Standard 45)')
     ap.add_argument('--kanal-d', type=float, default=None, help='Durchmesser des Schlauchkanals im Flügel (Standard 4,15; TPU druckt Kanäle enger, 4,5 schont den Schlauch)')
     ap.add_argument('--filet', type=float, default=R_FILET, help='Verrundungsradius der Übergänge, 0 = aus')
     ap.add_argument('--stutzen', choices=['aus', 'einseitig', 'symmetrisch', 'beidseitig'], default='symmetrisch',
@@ -485,7 +486,9 @@ def main():
                     'z. B. 49.2,31.8,27.8; Projektion = Nasenflügelansatz bis Spitze in der Seitenansicht')
     ap.add_argument('--spiel', type=float, default=None, help='Abstand Schale–Haut in mm (Standard 0,15)')
     a = ap.parse_args()
-    global T_WAND, T_RAND, FL_DICKE, YA, KANAL_D_LANG
+    global T_WAND, T_RAND, FL_DICKE, YA, KANAL_D_LANG, HUELSE_LAENGE
+    if a.huelse_laenge is not None:
+        HUELSE_LAENGE = a.huelse_laenge
     if a.kanal_d is not None:
         KANAL_D_LANG = a.kanal_d
     if a.nase:
