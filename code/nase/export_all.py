@@ -10,6 +10,8 @@ items = [(f"{P}segment{k}", t.segment(k)) for k in range(1, t.N + 1)]
 if t.RINGE:
     items += [(f"{P}ring{k}", t.ring(k)) for k in range(2, t.N)]
 items += [(f"{P}kappe", t.cap())]
+if t.KAPPE_BREIT:        # Variante Feder + Schnur: Kappe mit Knotenloch und Federscheibe für den Taschenboden
+    items += [(f"{P}kappe_schnur", t.cap_breit(schnur=True)), (f"{P}federscheibe", t.federscheibe())]
 if t.FUSS:               # draht2/draht6 laufen ohne Fuß (Taschenboden der Prothese ist der Anschlag)
     items += [(f"{P}fuss_fluegel", t.foot(True)), (f"{P}fuss_rund", t.foot(False))]
 for n, s in items:

@@ -129,7 +129,7 @@ SHAFT_R = RI5 - 0.1
 SHAFT_BOT = -7.95
 
 
-def cap_breit():
+def cap_breit(schnur=False):
     """z = 0 = flache Unterseite (liegt eingefahren auf den Stirnflächen von Segment 2..N-1)."""
     R = KAPPE_R
     p = [(RO[N] + GLUE + 0.3, 0.0), (R - 0.3, 0.0), (R, 0.3), (R, KAPPE_BAND)]
@@ -141,10 +141,27 @@ def cap_breit():
     rm = RO[N] + GLUE                       # Muffe Ø 5,1 für Segment 6 (Klebespalt 0,05)
     p += [(0.0, KAPPE_MUFFE), (rm, KAPPE_MUFFE), (rm, 0.3)]
     s = revolve(p)
+    if schnur:
+        # Schnur statt Draht: Durchgangsloch Ø 1,2 bis zum Scheitel, oben Senkung für den Knoten (Ø 3,6, 1,5 tief).
+        # Die Feder (Außen-Ø 3,0) stützt sich auf den Muffenboden um das Loch.
+        top = KAPPE_BAND + R
+        hole = cq.Workplane("XY").workplane(offset=KAPPE_MUFFE - 0.1).circle(0.6).extrude(top - KAPPE_MUFFE + 0.2).val()
+        senk = cq.Solid.makeCone(0.6, 1.8, 1.5, cq.Vector(0, 0, top - 1.5), cq.Vector(0, 0, 1))
+        return s.cut(hole).cut(senk)
     # Sackloch Ø 1,7 für den Draht vom Muffenboden nach oben (1,2 mm Restwand unter dem Scheitel)
     top = KAPPE_BAND + R - 1.2
     hole = cq.Workplane("XY").workplane(offset=KAPPE_MUFFE - 0.1).circle(0.85).extrude(top - KAPPE_MUFFE + 0.1).val()
     return s.cut(hole)
+
+
+def federscheibe():
+    """PETG-Scheibe für den Taschenboden der Prothese (Feder + Schnur): Auflage der Feder und harter Anschlag der
+    Segmente beim Einfahren. Ø 18,8 passt von vorn durch die Prothesenbohrung Ø 19,3. Mitte: Loch Ø 1,5 für die
+    Schnur mit Einlauf unten, oben eine Mulde Ø 3,4 × 0,4, die das Federende zentriert."""
+    t, r = 1.2, 9.4
+    s = revolve([(0.75, 0.0), (r - 0.3, 0.0), (r, 0.3), (r, t), (1.7, t), (1.7, t - 0.4), (0.75, t - 0.4)])
+    fun = cq.Solid.makeCone(1.25, 0.75, 0.5, cq.Vector(0, 0, -0.01), cq.Vector(0, 0, 1))
+    return s.cut(fun)
 
 
 def cap():
