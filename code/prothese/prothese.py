@@ -434,6 +434,7 @@ def main():
     ap.add_argument('--austritt', default='unten', choices=['unten', 'links', 'rechts'])
     ap.add_argument('--z-platte', type=float, default=Z_PLATTE, help='Z der Fußplatten-Rückseite (Nasenspitze: 22,5)')
     ap.add_argument('--kanal-radius', type=float, default=KANAL_BOGEN)
+    ap.add_argument('--kanal-d', type=float, default=None, help='Durchmesser des Schlauchkanals im Flügel (Standard 4,15; TPU druckt Kanäle enger, 4,5 schont den Schlauch)')
     ap.add_argument('--filet', type=float, default=R_FILET, help='Verrundungsradius der Übergänge, 0 = aus')
     ap.add_argument('--stutzen', choices=['aus', 'einseitig', 'symmetrisch', 'beidseitig'], default='symmetrisch',
                     help='Schlauchstutzen am seitlichen Austritt; symmetrisch = Gegenstutzen ohne Bohrung auf der anderen Seite; beidseitig = auch der Gegenkanal ist gebohrt')
@@ -448,7 +449,9 @@ def main():
                     'z. B. 49.2,31.8,27.8; Projektion = Nasenflügelansatz bis Spitze in der Seitenansicht')
     ap.add_argument('--spiel', type=float, default=None, help='Abstand Schale–Haut in mm (Standard 0,15)')
     a = ap.parse_args()
-    global T_WAND, T_RAND, FL_DICKE, YA
+    global T_WAND, T_RAND, FL_DICKE, YA, KANAL_D_LANG
+    if a.kanal_d is not None:
+        KANAL_D_LANG = a.kanal_d
     if a.nase:
         w, pj, b = (float(v) for v in a.nase.split(','))
         sx, sy, sz = morph_faktoren(w, pj, b)
