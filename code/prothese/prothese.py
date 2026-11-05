@@ -418,12 +418,25 @@ def baue(scan, skala, band, austritt, z_platte=None, kanal_radius=None, filet=No
         if holz_stil == 'grob':
             glatt = trimesh.boolean.difference([ausen, cut], engine='manifold')    # für die Wanddicke unter den Astlöchern
             z_spitze = float(m.vertices[:, 2].max())
-            aeste = [((4.0, YA + HUELSE_R, z_seg0 + 20.0), 3.0),                  # Hülse oben
-                     ((-0.7 * HUELSE_R, YA - 0.7 * HUELSE_R, z_ende - 11.0), 2.4),  # Hülse unten links
+            dick = HUELSE_R - BOHRUNG_R >= 2.0              # dünne Hülse (z. B. 1,2 mm): dort nur geschlossene Äste
+            aeste = [((4.0, YA + HUELSE_R, z_seg0 + min(20.0, 0.55 * HUELSE_LAENGE)), 3.0 if dick else 2.4, dick),   # Hülse oben
+                     ((-0.7 * HUELSE_R, YA - 0.7 * HUELSE_R, z_ende - min(11.0, 0.4 * HUELSE_LAENGE)), 2.4 if dick else 2.0, dick),  # Hülse unten links
                      ((13.0, YA + 3.0, 0.5 * (z_spitze + z_start)), 2.6),       # Keil rechts
+                     ] + ([] if dick else [((-11.0, YA + 7.0, 0.5 * (z_spitze + z_start) + 2.0), 2.3)]) + [   # dünne Hülse: dafür ein zweites Astloch im Keil
                      ((-30.0, YA + 4.0, -20.0), 2.0, False),                   # linker Flügel: geschlossener Ast (Flügel zu dünn für ein Loch)
                      ((34.0, YA + 6.0, -24.0), 1.6, False)]                    # rechter Flügel: geschlossener Ast
+            ausen_glatt = ausen
             ausen, info['aeste'] = H.holzstruktur_grob(ausen, glatt, aeste, tiefe=holz)
+            # Sicherung: Das Relief darf nirgends Material wegnehmen außer in den Astlöchern (an dünnen Rändern kann die
+            # verschobene Fläche sich sonst verknoten und winzige Löcher hinterlassen). Darum die glatte Grundform wieder
+            # dazunehmen, ohne die Bereiche der offenen Astlöcher.
+            kugeln = []
+            for p_, rl_, ti_ in info['aeste']:
+                if ti_ > 0:
+                    k = trimesh.creation.icosphere(subdivisions=3, radius=1.6 * rl_)
+                    k.apply_translation(p_); kugeln.append(k)
+            fuell = trimesh.boolean.difference([ausen_glatt] + kugeln, engine='manifold') if kugeln else ausen_glatt
+            ausen = trimesh.boolean.union([ausen, fuell], engine='manifold')
         else:
             ausen = H.holzstruktur(ausen, tiefe=holz)
     tpu = trimesh.boolean.difference([ausen, cut], engine='manifold')
@@ -450,6 +463,21 @@ def hauptkoerper(s):
         if q.is_watertight and len(q.split(only_watertight=False)) == 1:
             return r
         best = best or r
+    # Rückfall: nach dem STL-Hin-und-Rück-Lauf Splitter und entartete Dreiecke entfernen, kleine Löcher schließen
+    for tol in (0.001, 0.01, 0.02, 0.05):
+        mm = M.simplify(tol).to_mesh()
+        r = trimesh.Trimesh(np.asarray(mm.vert_properties)[:, :3], np.asarray(mm.tri_verts))
+        b = io.BytesIO(); r.export(b, file_type='stl'); b.seek(0)
+        q = trimesh.load(b, file_type='stl')
+        q.merge_vertices(digits_vertex=4)
+        q.update_faces(q.nondegenerate_faces(height=1e-6))
+        q.remove_unreferenced_vertices()
+        q = max(q.split(only_watertight=False), key=lambda p: abs(p.volume))
+        trimesh.repair.fill_holes(q); trimesh.repair.fix_normals(q)
+        b = io.BytesIO(); q.export(b, file_type='stl'); b.seek(0)
+        q2 = trimesh.load(b, file_type='stl')
+        if q2.is_watertight and len(q2.split(only_watertight=False)) == 1:
+            return q
     return best
 
 
