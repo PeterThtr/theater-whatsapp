@@ -154,6 +154,17 @@ def cap_breit(schnur=False):
     return s.cut(hole)
 
 
+def federscheibe_rohr(t=2.0, d_rohr=2.0):
+    """Federscheibe mit Aufnahme für ein Führungsrohr (Außen-Ø 2,0, innen etwa 1, z. B. Kohlefaser-, Messing- oder
+    PTFE-Rohr). Das Rohr steckt in der durchgehenden Mittelbohrung, steht unten auf dem Prothesenboden und ragt in die
+    Feder (Innen-Ø etwa 2,3); die Schnur läuft durch das Rohr. Gedruckte Löcher werden enger: Bohrung nominal = Rohr-Ø,
+    zu stramm -> mit 2-mm-Bohrer von Hand nachreiben. Oben Mulde Ø 3,4 × 0,4 für das Federende."""
+    r = 9.4
+    rb = d_rohr / 2
+    s = revolve([(rb, 0.0), (r - 0.3, 0.0), (r, 0.3), (r, t), (1.7, t), (1.7, t - 0.4), (rb + 0.2, t - 0.4), (rb, t - 0.6)])
+    return s
+
+
 def federscheibe():
     """PETG-Scheibe für den Taschenboden der Prothese (Feder + Schnur): Auflage der Feder und harter Anschlag der
     Segmente beim Einfahren. Ø 18,8 passt von vorn durch die Prothesenbohrung Ø 19,3. Mitte: Loch Ø 1,5 für die
