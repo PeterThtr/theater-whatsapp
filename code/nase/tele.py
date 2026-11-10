@@ -166,6 +166,19 @@ def cap_breit(schnur=False):
     return s.cut(hole)
 
 
+def bremsringe(dicke, h=0.9, dehnung=0.025):
+    """feder2: Bremsringe aus TPU für die O-Ring-Nuten von Segment 2..5, rechteckiger Querschnitt h × dicke.
+    Innen-Ø = Nutgrund-Ø × (1 − dehnung), damit der Ring gespannt in der Nut sitzt. Platz Nutgrund→Bohrung des äußeren
+    Segments ist NUT_TIEFE + Spiel (0,8): dicke 0,8 liegt an, 0,9 und 1,0 pressen leicht bzw. kräftig. Alle vier Ringe
+    konzentrisch in einem Teil (flach drucken)."""
+    teile = []
+    for k in range(2, N + 1):
+        rg = RO[k] + G - spiel(k - 1) - NUT_TIEFE
+        ri = rg * (1 - dehnung)
+        teile.append(revolve([(ri, 0.0), (ri + dicke, 0.0), (ri + dicke, h), (ri, h)]))
+    return cq.Compound.makeCompound(teile)
+
+
 def federscheibe_feder(t=2.0, d_aussen=26.6, h_dorn=50.0):
     """feder2: Scheibe für den Prothesenboden (Ø 26,6 passt von vorn durch die Bohrung Ø 27,1). Mulde für die Feder
     (Außen-Ø 10 → Ø 10,6 × 0,6) und ein gedruckter Führungsdorn Ø 7,6 (Feder innen etwa 8,4), damit die Feder im weiten
