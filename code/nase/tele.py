@@ -21,7 +21,7 @@ DRAHT = PROFIL in ("draht", "draht6", "draht2")
 N = 6 if DRAHT6 else 5           # Anzahl Segmente
 RINGE = not (DRAHT6 or DRAHT2 or FEDER2)   # aufgeklebte Ringe zum geordneten Einziehen
 FUSS = RINGE
-NUT = FEDER2                     # feder2: O-Ring-Nut im Bund von Segment 2..5 (Handbetrieb mit Bremsringen)
+NUT = FEDER2 or DRAHT2           # feder2/draht2: O-Ring-Nut im Bund von Segment 2..5 (Handbetrieb mit Bremsringen)
 NUT_TIEFE, NUT_B, NUT_Z = 0.6, 1.0, 3.5   # Tiefe radial, Breite am Grund, Unterkante über der Segment-Unterkante                     # ohne Ringe: kein Fuß, der Taschenboden der Prothese ist der Anschlag
 KAPPE_BREIT = DRAHT6 or DRAHT2 or FEDER2   # breite Kappe statt Ringe
 
@@ -166,7 +166,7 @@ def cap_breit(schnur=False):
     return s.cut(hole)
 
 
-def bremsringe(dicke, h=0.9, dehnung=0.025):
+def bremsringe(dicke=None, h=0.9, dehnung=0.025, pressung=None):
     """feder2: Bremsringe aus TPU für die O-Ring-Nuten von Segment 2..5, rechteckiger Querschnitt h × dicke.
     Innen-Ø = Nutgrund-Ø × (1 − dehnung), damit der Ring gespannt in der Nut sitzt. Platz Nutgrund→Bohrung des äußeren
     Segments ist NUT_TIEFE + Spiel (0,8): dicke 0,8 liegt an, 0,9 und 1,0 pressen leicht bzw. kräftig. Alle vier Ringe
@@ -175,7 +175,9 @@ def bremsringe(dicke, h=0.9, dehnung=0.025):
     for k in range(2, N + 1):
         rg = RO[k] + G - spiel(k - 1) - NUT_TIEFE
         ri = rg * (1 - dehnung)
-        teile.append(revolve([(ri, 0.0), (ri + dicke, 0.0), (ri + dicke, h), (ri, h)]))
+        # pressung: Ringdicke = Platz bis zur Bohrung (NUT_TIEFE + Spiel der Fuge) + pressung, je Segment passend
+        d = dicke if pressung is None else NUT_TIEFE + spiel(k - 1) + pressung
+        teile.append(revolve([(ri, 0.0), (ri + d, 0.0), (ri + d, h), (ri, h)]))
     return cq.Compound.makeCompound(teile)
 
 
