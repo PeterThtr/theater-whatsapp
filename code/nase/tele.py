@@ -20,7 +20,9 @@ FEDER2 = PROFIL == "feder2"
 DRAHT = PROFIL in ("draht", "draht6", "draht2")
 N = 6 if DRAHT6 else 5           # Anzahl Segmente
 RINGE = not (DRAHT6 or DRAHT2 or FEDER2)   # aufgeklebte Ringe zum geordneten Einziehen
-FUSS = RINGE                     # ohne Ringe: kein Fuß, der Taschenboden der Prothese ist der Anschlag
+FUSS = RINGE
+NUT = FEDER2                     # feder2: O-Ring-Nut im Bund von Segment 2..5 (Handbetrieb mit Bremsringen)
+NUT_TIEFE, NUT_B, NUT_Z = 0.6, 1.0, 3.5   # Tiefe radial, Breite am Grund, Unterkante über der Segment-Unterkante                     # ohne Ringe: kein Fuß, der Taschenboden der Prothese ist der Anschlag
 KAPPE_BREIT = DRAHT6 or DRAHT2 or FEDER2   # breite Kappe statt Ringe
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
@@ -98,6 +100,13 @@ def segment(k, opfer=False, fase=None):
         p += [(ro, CH + cb), (ro + cb, CH), (ro + cb, fase), (ro + cb - fase, 0.0)]
         rb = ro + cb
     s = revolve(p)
+    if NUT and k >= 2:
+        # O-Ring-Nut im Bund (Bremse für den Handbetrieb): Grund NUT_TIEFE unter der Bund-Gleitfläche, Breite NUT_B,
+        # obere Flanke 45° (stehend ohne Stützen druckbar). O-Ring Schnurstärke 1,0: Pressung etwa 20 % gegen die Bohrung.
+        r0 = rb - NUT_TIEFE
+        z0 = NUT_Z
+        nut = revolve([(r0, z0), (rb + 0.2, z0), (rb + 0.2, z0 + NUT_B + (rb + 0.2 - r0)), (r0, z0 + NUT_B)])
+        s = s.cut(nut)
     if opfer:
         s = s.fuse(opferfuss(rb, fase))
         assert s.isValid() and len(s.Solids()) == 1, "Opferfuss nicht verbunden"
@@ -329,6 +338,7 @@ if __name__ == "__main__":
     for k in range(1, N + 1):
         print(f"Seg {k}: RI {RI[k]:.2f}  RO {RO[k]:.2f}  (Ø {2*RO[k]:.1f})", end="")
         if k >= 2: print(f"  Bund Ø {2*(RO[k]+G-spiel(k-1)):.2f}", end="")
+        if k >= 2 and NUT: print(f"  Nutgrund Ø {2*(RO[k]+G-spiel(k-1)-NUT_TIEFE):.2f}", end="")
         if k <= N - 1: print(f"  Lippe Ø {2*(RO[k+1]+spiel(k)):.2f}", end="")
         print()
     print("Hub je Fuge:", [round(stop_offset(k) - (tops_retracted()[k + 1] - tops_retracted()[k]), 2) for k in range(1, N)])
