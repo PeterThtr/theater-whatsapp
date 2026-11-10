@@ -216,6 +216,18 @@ Code: `code/prothese/anprobe.py` (Scan-STL rein, Anprobe-Schale, mit `--fluegel`
   - **Griff** `bedien_griff` (Ø 24 × 35, 6 g): Flansch Ø 24 zum Ziehen, Schaft Ø 12 mit Rillen, Kuppe zum Drücken. Draht in Bohrung Ø 1,6 × 22, Gewindestift M3 quer (Kernloch Ø 2,6), damit ist die Drahtlänge einstellbar. Druck stehend, Flansch unten.
   - Freier Draht unter dem Halter bis etwa 19 cm: Knicklast etwa 14 N (gelenkig), mit der Hand geführt mehr. Drahtlänge so einstellen, dass bei ganz ausgefahrener Nase der Griff noch etwa 5 mm unter dem Halter steht.
 
+## Teil E: Neubewertung des Gesamtkonzepts (nach dem 10.11., Vorschlag, Entscheidung von Peter offen)
+
+**Vorgaben von Peter (neu gefasst):** abnehmbar, **kein Hautkleber**; für die Zuschauer wächst die Nase von selbst; möglichst leicht und klein; hält im Gesicht auch bei viel Bewegung; Bedienung und Zusatzteile im Kostüm; möglichst viel gedruckt (TPU, PLA, PETG).
+
+**Vorschlag (nur überlegt und überschlagen, nichts davon gebaut):**
+- **Antrieb:** Feder im Teleskop schiebt, Schnur hält (wie Feder + Schnur). Am Gürtel statt Handwinde eine **kleine Motorspule** (N20 mit Schneckengetriebe, selbsthemmend, etwa 30 U/min, Spule etwa Ø 15: 188 mm in etwa 8 s), Taster verdeckt in der Hand oder Tasche. Handbetrieb (Schnur durch die Finger laufen lassen) als Rückfall.
+- **Teleskop:** der schlanke gedruckte Satz `draht2` (Ø 19,8, läuft leicht) mit Feder Ø 3 × 0,3, Führungsrohr und breiter Kappe. `feder2` (Ø 27,6, Feder Ø 10) nur als Rückfall, falls die dünne Feder nicht zuverlässig schiebt.
+- **Halt ohne Kleber (größte offene Lücke):** Ein Band auf einer Höhe verhindert das Kippen nicht (ausgefahren etwa 0,025 N·m statisch, bei Bewegung grob das Dreifache). Nötig ist eine **Dreipunkt-Halterung**: Schale deutlich größer als die Nase (Halbmaske in Holzoptik über Nasenrücken, Wangenknochen und Brauen, oder Brillenform) mit **zwei Bändern in verschiedenen Höhen** (seitlich um den Kopf und über den Scheitel), verdeckt unter Mütze oder Perücke. Dafür braucht es einen **Scan des Gesichts der Schauspielerin** (Stirn bis Oberlippe, beide Wangen).
+- **Schlauch:** dünner PTFE-Schlauch 2/1 statt 4/2 für die Schnur (leichter, biegsamer, zerrt weniger am Gesicht), Zugentlastung am Kopfband und am Kragen.
+- **Verworfen:** Schubdraht (Biegeradius), 6 Segmente (Reibung), Druckluft im Teleskop (undicht, bei Ø 5 nur etwa 0,6 N bei 0,3 bar), Motor im Gesicht (Gewicht, Geräusch), Handbetrieb mit Bremsringen (wächst nicht von selbst), Hautkleber.
+- **Reihenfolge:** zuerst den Halt testen (vorhandene Prothese + ausgefahrenes Teleskop + zweites Band über den Scheitel, Kopf schütteln), dann die Feder, dann die Motorspule.
+
 ## Nächste Schritte (Peters Rückmeldung abwarten)
 
 1. Passprobe Teleskop: Sitz des Spiels 0,15. Bei Bedarf `S` in `tele.py` ändern, neu exportieren und `verify.py` laufen lassen.
