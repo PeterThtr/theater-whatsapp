@@ -195,7 +195,10 @@ def federscheibe_feder(t=2.0, d_aussen=26.6, h_dorn=50.0):
     return s.cut(fun)
 
 
-def federscheibe_rohr(t=2.0, d_rohr=2.0):
+RIPPE = 0.12      # Höhe der Klemmrippen in der Röhrchenbohrung (radial)
+
+
+def federscheibe_rohr(t=2.0, d_rohr=2.0, rippen=False):
     """Federscheibe mit Aufnahme für ein Führungsrohr (Außen-Ø 2,0, innen etwa 1, z. B. Kohlefaser-, Messing- oder
     PTFE-Rohr). Das Rohr steckt in der durchgehenden Mittelbohrung, steht unten auf dem Prothesenboden und ragt in die
     Feder (Innen-Ø etwa 2,3); die Schnur läuft durch das Rohr. Gedruckte Löcher werden enger: Bohrung nominal = Rohr-Ø,
@@ -203,6 +206,15 @@ def federscheibe_rohr(t=2.0, d_rohr=2.0):
     r = 9.4
     rb = d_rohr / 2
     s = revolve([(rb, 0.0), (r - 0.3, 0.0), (r, 0.3), (r, t), (1.7, t), (1.7, t - 0.4), (rb + 0.2, t - 0.4), (rb, t - 0.6)])
+    if rippen:
+        # drei Klemmrippen in der Bohrung (radial RIPPE hoch, 0,6 breit), unten mit 45°-Anlauf: das Röhrchen klemmt
+        # ohne Kleber (Kugelschreibermine aus PP lässt sich kaum kleben)
+        for i in range(3):
+            a = math.radians(120 * i)
+            rip = cq.Workplane("XY").box(0.6, RIPPE + 0.3, t - 1.2, centered=(True, False, False)) \
+                .translate((0, rb - RIPPE, 0.6)).val().rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), math.degrees(a))
+            s = s.fuse(rip)
+        s = s.cut(cq.Solid.makeCone(rb + 0.3, rb, 0.6, cq.Vector(0, 0, -0.01), cq.Vector(0, 0, 1)))
     return s
 
 
