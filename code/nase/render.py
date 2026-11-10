@@ -23,7 +23,7 @@ for ax,ext in zip(axs,(False,True)):
     ax.set_title(("Ausgefahren" if ext else "Eingefahren")+f" – Länge {max(p.BoundingBox().zmax for p in parts.values())+1.5:.0f} mm (Längsschnitt)",fontsize=10,loc="left")
     ax.set_yticks([]); ax.tick_params(labelsize=8)
 axs[1].set_xlabel("mm ab Oberseite Fußplatte",fontsize=9)
-plt.tight_layout(); plt.savefig("out/"+{"draht6":"nase_draht6_","draht2":"nase_draht2_","draht":"nase_draht_"}.get(t.PROFIL,"nase_")+"schnitt.png",dpi=130)
+plt.tight_layout(); plt.savefig("out/"+{"draht6":"nase_draht6_","draht2":"nase_draht2_","draht":"nase_draht_","feder2":"nase_feder2_"}.get(t.PROFIL,"nase_")+"schnitt.png",dpi=130)
 # Detail Fuge
 fig,ax=plt.subplots(figsize=(7,5))
 parts,B=t.assembly(True)
@@ -34,4 +34,4 @@ for n in [q for q in ("seg2","seg3","ring2","seg1") if q in parts]:
 ax.set_xlim((5.5,9.5) if t.DRAHT else (8.5,14.5)); ax.set_ylim(B[3]-2,B[2]+t.L+2.5); ax.set_aspect("equal")
 ax.set_title("Detail ausgefahren: Segment 3 (blau) in Segment 2 (orange).\nBund von Seg. 3 liegt an der Lippe von Seg. 2 an"+(", Ring 2 grün" if t.RINGE else ""),fontsize=9)
 ax.set_xlabel("Radius mm"); ax.set_ylabel("z mm")
-plt.tight_layout(); plt.savefig("out/"+{"draht6":"nase_draht6_","draht2":"nase_draht2_","draht":"nase_draht_"}.get(t.PROFIL,"nase_")+"detail.png",dpi=130)
+plt.tight_layout(); plt.savefig("out/"+{"draht6":"nase_draht6_","draht2":"nase_draht2_","draht":"nase_draht_","feder2":"nase_feder2_"}.get(t.PROFIL,"nase_")+"detail.png",dpi=130)

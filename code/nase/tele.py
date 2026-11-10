@@ -14,11 +14,14 @@ PROFIL = os.environ.get("TELE_PROFIL", "feder")
 # Segmente mit) und mehr Spiel an der Fuge Segment 3/4 (Peter, 3.11.: dort zu viel Reibung).
 DRAHT6 = PROFIL == "draht6"
 DRAHT2 = PROFIL == "draht2"
+# "feder2": Feder-Satz (Feder Ø 10, Schnur) mit den Lehren aus draht2: breite Kappe statt Ringe, kein Fuß (Federscheibe
+# mit Führungsdorn auf dem Prothesenboden), etwas mehr Spiel (0,2, an der Fuge 3/4 0,25).
+FEDER2 = PROFIL == "feder2"
 DRAHT = PROFIL in ("draht", "draht6", "draht2")
 N = 6 if DRAHT6 else 5           # Anzahl Segmente
-RINGE = not (DRAHT6 or DRAHT2)   # aufgeklebte Ringe zum geordneten Einziehen
+RINGE = not (DRAHT6 or DRAHT2 or FEDER2)   # aufgeklebte Ringe zum geordneten Einziehen
 FUSS = RINGE                     # ohne Ringe: kein Fuß, der Taschenboden der Prothese ist der Anschlag
-KAPPE_BREIT = DRAHT6 or DRAHT2   # breite Kappe statt Ringe
+KAPPE_BREIT = DRAHT6 or DRAHT2 or FEDER2   # breite Kappe statt Ringe
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 os.makedirs(OUT, exist_ok=True)
@@ -27,7 +30,7 @@ os.makedirs(OUT, exist_ok=True)
 S = 0.15          # radiales Spiel an Lippe und Bund
 G = 0.6 if DRAHT6 else 0.8   # Ringspalt zwischen Rohr k+1 aussen und Rohr k innen
 C = G - S         # Bundüberstand = Lippenüberstand (0.65)
-S_FUGE = {3: 0.25} if DRAHT2 else {}   # abweichendes radiales Spiel je Fuge k/k+1 (draht2: Fuge 3/4)
+S_FUGE = {3: 0.25} if DRAHT2 else ({1: 0.2, 2: 0.2, 3: 0.25, 4: 0.2} if FEDER2 else {})   # abweichendes radiales Spiel je Fuge k/k+1 (draht2: Fuge 3/4)
 
 
 def spiel(k):
@@ -154,6 +157,20 @@ def cap_breit(schnur=False):
     return s.cut(hole)
 
 
+def federscheibe_feder(t=2.0, d_aussen=26.6, h_dorn=50.0):
+    """feder2: Scheibe für den Prothesenboden (Ø 26,6 passt von vorn durch die Bohrung Ø 27,1). Mulde für die Feder
+    (Außen-Ø 10 → Ø 10,6 × 0,6) und ein gedruckter Führungsdorn Ø 7,6 (Feder innen etwa 8,4), damit die Feder im weiten
+    Segment 1 nicht ausknickt. Schnurloch Ø 1,5 durch den Dorn, unten mit Einlauf. Dorn oben gerundet."""
+    r = d_aussen / 2
+    rd, rl = 3.8, 0.75
+    zm = t - 0.6
+    p = [(rl, 0.0), (r - 0.3, 0.0), (r, 0.3), (r, t), (5.3, t), (5.3, zm), (rd, zm), (rd, zm + h_dorn - 1.0),
+         (rd - 1.0, zm + h_dorn), (rl, zm + h_dorn)]
+    s = revolve(p)
+    fun = cq.Solid.makeCone(1.5, rl, 0.75, cq.Vector(0, 0, -0.01), cq.Vector(0, 0, 1))
+    return s.cut(fun)
+
+
 def federscheibe_rohr(t=2.0, d_rohr=2.0):
     """Federscheibe mit Aufnahme für ein Führungsrohr (Außen-Ø 2,0, innen etwa 1, z. B. Kohlefaser-, Messing- oder
     PTFE-Rohr). Das Rohr steckt in der durchgehenden Mittelbohrung, steht unten auf dem Prothesenboden und ragt in die
@@ -181,7 +198,7 @@ def federscheibe():
 
 def cap():
     if KAPPE_BREIT:
-        return cap_breit()
+        return cap_breit(schnur=not DRAHT)      # feder2: Schnur mit Knoten, draht2/6: Sackloch für den Draht
     # z=0 = Stirnfläche Segment 5
     p = [(0, SHAFT_BOT), (SHAFT_R - 0.3, SHAFT_BOT), (SHAFT_R, SHAFT_BOT + 0.3),
          (SHAFT_R, -0.65), (RI5 + 0.6, GLUE), (RO[N], GLUE), (CAP_R, GLUE + WC), (CAP_R, 1.05)]
