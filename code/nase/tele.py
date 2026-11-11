@@ -218,6 +218,17 @@ def federscheibe_rohr(t=2.0, d_rohr=2.0, rippen=False):
     return s
 
 
+def federscheibe_stift(t=6.0, d_stift=1.6, r_nut=1.15, b_nut=0.6):
+    """Federscheibe für einen massiven Stahlstift Ø 1,5 als Federführung (statt Röhrchen). Der Stift steckt in der
+    Bohrung (nominal Ø 1,6, drei Klemmrippen -> etwa Ø 1,36, ggf. zusätzlich mit Sekundenkleber), die Schnur läuft
+    daneben in einer Längsnut (0,6 breit, bis R 1,15, also innerhalb des Feder-Innen-Ø etwa 2,4) und dann im Spalt
+    zwischen Stift und Feder."""
+    s = federscheibe_rohr(t=t, d_rohr=d_stift, rippen=True)
+    nut = cq.Workplane("XY").box(b_nut, r_nut, t + 1.0, centered=(True, False, False)).translate((0, 0, -0.5)).val() \
+        .rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), 60.0)
+    return s.cut(nut)
+
+
 def federscheibe():
     """PETG-Scheibe für den Taschenboden der Prothese (Feder + Schnur): Auflage der Feder und harter Anschlag der
     Segmente beim Einfahren. Ø 18,8 passt von vorn durch die Prothesenbohrung Ø 19,3. Mitte: Loch Ø 1,5 für die
