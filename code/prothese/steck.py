@@ -108,8 +108,12 @@ def schaft(L, z_bohr, ya):
     ri0 = R_ZAPFEN - T_SCHAFT
     ri1 = R_SCHAFT1 - T_SCHAFT
     zi_end = z_hals - ri1
-    innen = [kegelrohr(ri0, ri0, z_bohr - 1, z_kap + 0.5, ya),
-             kegelrohr(R_SCHAFT0 - T_SCHAFT, ri1, z_kap + 0.5, zi_end, ya),
+    # Innen parallel zum 45°-Übergang außen (sonst wird die Wand dort nur 0,2 dick -> leere Schichten im Slicer)
+    dr = (R_SCHAFT0 - T_SCHAFT) - ri0
+    z_i0 = z_kap + T_SCHAFT * 1.0
+    innen = [kegelrohr(ri0, ri0, z_bohr - 1, z_i0 + 0.01, ya),
+             kegelrohr(ri0, R_SCHAFT0 - T_SCHAFT, z_i0, z_i0 + dr + 0.01, ya),
+             kegelrohr(R_SCHAFT0 - T_SCHAFT, ri1, z_i0 + dr, zi_end, ya),
              kegelrohr(ri1, 0.01, zi_end, zi_end + ri1, ya)]
     s = trimesh.boolean.difference([s, trimesh.boolean.union(innen, engine='manifold')], engine='manifold')
     return s, (z_kap, z_hals)
