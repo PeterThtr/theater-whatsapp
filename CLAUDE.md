@@ -218,6 +218,15 @@ Code: `code/prothese/anprobe.py` (Scan-STL rein, Anprobe-Schale, mit `--fluegel`
   - **Griff** `bedien_griff` (Ø 24 × 35, 6 g): Flansch Ø 24 zum Ziehen, Schaft Ø 12 mit Rillen, Kuppe zum Drücken. Draht in Bohrung Ø 1,6 × 22, Gewindestift M3 quer (Kernloch Ø 2,6), damit ist die Drahtlänge einstellbar. Druck stehend, Flansch unten.
   - Freier Draht unter dem Halter bis etwa 19 cm: Knicklast etwa 14 N (gelenkig), mit der Hand geführt mehr. Drahtlänge so einstellen, dass bei ganz ausgefahrener Nase der Griff noch etwa 5 mm unter dem Halter steht.
 
+## Teil F: Steck-Nase ohne Funktion (15.11., gerechnet, nicht gedruckt)
+
+Peter: Nase ohne Mechanik, hält **ohne Kleber und ohne Band**, Atmung frei, drei Längen (so kurz wie möglich, 20 cm, 40 cm), am Ende eine **Stups-/Puppennase**. Code `code/prothese/steck.py` (`python3 code/prothese/steck.py scan/nase_scaniverse_original_m.stl --out out/steck/`), Dateien in `teile/aktuell/stecknase/`, Ansicht `stecknase_ansicht.png`.
+- **Grundlage:** allgemeine Frauennase (`--nase 49.2,31.8,27.8` wie Teil C/D), Umriss und Nasenloch-Freischnitt wie die Prothese (Unterseite vor Z 15 bleibt, Nasenlöcher frei).
+- **Halt:** TPU-Kappe mit **Pressung** (Innenfläche 0,15 mm unter der Haut, `SPIEL = -0.15`), Wand 1,4, zum Rand 0,6; greift über die Nasenflügel und unter die Spitze. Rechnerisch: Kippmoment 20 cm etwa 10 N·mm, 40 cm etwa 33 N·mm (+ Kappe); Hebel Nasenrücken–Unterseite etwa 25 mm → etwa 0,4 bzw. 1,3 N Anpresskraft. 20 cm plausibel, **40 cm unsicher** (erst testen; leichter mit LW-PLA). Passform auf einer fremden Nase ist geschätzt.
+- **kurz** `stecknase_kurz_tpu.stl`: einteilig TPU, Puppennasen-Knolle (16 × 13,6 × 15, Stups 1,6 nach oben, zwei angedeutete Nasenlöcher) direkt auf der Kappe, L 35 mm ab Gesicht (Z 0), 5,0 cm³ (6 g).
+- **lang:** `stecknase_kappe_tpu.stl` (TPU, Steckhülse außen Ø 17,2, Bohrung Ø 12,0 × 12, 5,6 cm³) + hohler PETG-Schaft (Wand 0,9, Zapfen Ø 12,4 = 0,4 Übermaß im TPU, außen Ø 14,8 → 8,0, 45°-Übergänge, innen oben 45°-Spitze, Knolle am Ende): `stecknase_200_schaft_petg.stl` (einteilig, 176 hoch, 8,3 g) und `stecknase_400_schaft_teil1..3_petg.stl` (je 125 hoch, Stöße mit Steckzapfen 10 lang, 0,1 Luft, kleben; 15,9 g). Alle stehend, Zapfen unten, praktisch ohne Stützen; Kappe mit Hülse/Knolle oben, etwa 44 mm² Überhang.
+- Geprüft: wasserdicht, ein Körper je Teil; Unterseite der Nase von unten gesehen bis auf die Spitze frei. Nicht geprüft: Halt, Druck auf die Haut, Passform.
+
 ## Teil E: Neubewertung des Gesamtkonzepts (nach dem 10.11., Vorschlag, Entscheidung von Peter offen)
 
 **Vorgaben von Peter (neu gefasst):** abnehmbar, **kein Hautkleber**; für die Zuschauer wächst die Nase von selbst; möglichst leicht und klein; hält im Gesicht auch bei viel Bewegung; Bedienung und Zusatzteile im Kostüm; möglichst viel gedruckt (TPU, PLA, PETG).
