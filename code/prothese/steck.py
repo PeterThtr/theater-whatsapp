@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Steck-Nase ohne Funktion (Pinocchio-Nase mit Puppen-/Stupsnasen-Spitze), hält ohne Kleber und ohne Band.
+"""Steck-Nase ohne Funktion (Pinocchio-Nase, Ende als plan aufsitzende Halbkugel), hält ohne Kleber und ohne Band.
 
 Halt: TPU-Kappe auf der Nase mit leichter Pressung (Innenfläche 0,15 mm unter der Haut), sie greift über die
 Nasenflügel (breiteste Stelle hinter der Spitze) und unter die Nasenspitze (vor den Nasenlöchern). Nasenlöcher
 bleiben frei (Atmung). Grundlage: allgemeine Frauennase (Peters Scan verzerrt auf 49,2 / 31,8 / 27,8).
 
 Längen L = Abstand Gesicht (Z = 0) bis Vorderkante der Puppennase:
-  kurz : einteilig TPU, Puppennase direkt auf der Kappe.
+  kurz : einteilig TPU, Halbkugel (flache Seite vorn auf der Kappe).
   200 / 400: TPU-Kappe mit Steckhülse + hohler PETG-Schaft (Wand 0,9) mit Puppennase am Ende; 400 in 3 Stücken
              (je < 170 mm hoch, passt auch auf den A1 Mini), Stöße gesteckt und geklebt.
 Aufruf: python3 steck.py scan/nase_scaniverse_original_m.stl --out out/
@@ -30,12 +30,9 @@ L_ZAPFEN = 12.0
 R_HUELSE = 8.6
 # Schaft
 R_SCHAFT0 = 7.4               # außen am Kappenende
-R_SCHAFT1 = 4.0               # außen am Hals der Puppennase
+R_SCHAFT1 = 4.5               # außen am Schaftende = Radius der End-Halbkugel
 T_SCHAFT = 0.9
-# Puppennase
-KN = (8.0, 6.8, 7.5)          # Halbachsen x, y, z
-KN_DY = 1.6                   # Spitze leicht nach oben (Stupsnase)
-NL_R, NL_X, NL_DZ = 1.5, 2.6, 1.0   # Nasenlöcher der Puppennase (Mulden unten)
+R_KURZ = 8.0                  # Halbkugel der kurzen Nase
 STOSS_L = 10.0                # Steckzapfen an den Stößen des 400er-Schafts
 H_MAX = 178.0               # A1 Mini: 180 mm Bauhöhe
 
@@ -45,12 +42,12 @@ def ellipsoid(c, ax, sub=4):
     e.apply_scale(ax); e.apply_translation(c); return e
 
 
-def puppennase(zc, ya):
-    """Knolle mit leichtem Stups nach oben und zwei angedeuteten Nasenlöchern unten. zc = Mitte der Knolle."""
-    c = np.array([0.0, ya + KN_DY, zc])
-    k = ellipsoid(c, KN)
-    mulden = [ellipsoid(c + [s * NL_X, -KN[1] * 0.82, NL_DZ], (NL_R * 1.2, NL_R, NL_R * 1.4), 3) for s in (-1, 1)]
-    return trimesh.boolean.difference([k] + mulden, engine='manifold')
+def halbkugel(z_flach, r, ya):
+    """Halbkugel, flache Seite bei z_flach (quer zur Achse), Kuppe nach vorn (+Z)."""
+    k = trimesh.creation.icosphere(subdivisions=5, radius=r)
+    k.apply_translation([0, ya, z_flach])
+    box = trimesh.creation.box(bounds=[[-r - 1, ya - r - 1, z_flach], [r + 1, ya + r + 1, z_flach + r + 1]])
+    return trimesh.boolean.intersection([k, box], engine='manifold')
 
 
 def kegelrohr(r0, r1, z0, z1, ya, n=96):
@@ -81,9 +78,10 @@ def kappe(scan, variante):
     cut = [nase]
     info = {}
     if variante == 'kurz':
-        zc = z_tip + T_WAND + KN[2] - 3.0          # Knolle umschließt die Spitze
-        teile.append(puppennase(zc, ya))
-        info['L'] = zc + KN[2]
+        zf = z_tip + T_WAND - 0.5                  # flache Seite knapp vor der Spitze (verschmilzt mit der Kappe)
+        teile.append(halbkugel(zf, R_KURZ, ya))
+        teile.append(kegelrohr(R_KURZ, R_KURZ, zf - 3.0, zf + 0.01, ya))   # kurzer Bund hinter der flachen Seite
+        info['L'] = zf + R_KURZ
     else:
         z0 = z_tip + T_WAND + 0.6                  # Boden der Steckbohrung (vor der Kappe)
         teile.append(kegelrohr(R_HUELSE, R_HUELSE, z_tip - 6.0, z0 + L_ZAPFEN, ya))
@@ -98,20 +96,18 @@ def kappe(scan, variante):
 
 
 def schaft(L, z_bohr, ya):
-    """Hohler Schaft vom Kappenende (Zapfen in der Bohrung) bis zur Puppennase; L = Vorderkante der Knolle."""
-    zc = L - KN[2]
-    z_hals = zc - KN[2] * 0.55
+    """Hohler Schaft vom Kappenende (Zapfen in der Bohrung) bis zur End-Halbkugel; L = Scheitel der Halbkugel."""
+    z_hals = L - R_SCHAFT1                          # flache Seite der Halbkugel = Schaftende
     z_kap = z_bohr + L_ZAPFEN                       # Stirn der TPU-Hülse
     aussen = [kegelrohr(R_ZAPFEN, R_ZAPFEN, z_bohr + 0.3, z_kap + 0.5, ya),
               kegelrohr(R_ZAPFEN, R_SCHAFT0, z_kap - 0.01, z_kap + (R_SCHAFT0 - R_ZAPFEN), ya),   # 45°-Übergang (druckbar)
-              kegelrohr(R_SCHAFT0, R_SCHAFT1, z_kap + (R_SCHAFT0 - R_ZAPFEN) - 0.01, z_hals + 0.5, ya),
-              kegelrohr(R_SCHAFT1, R_SCHAFT1 + 2.5, z_hals, z_hals + 2.5, ya),   # 45°-Kragen in die Knolle (druckbar)
-              puppennase(zc, ya)]
+              kegelrohr(R_SCHAFT0, R_SCHAFT1, z_kap + (R_SCHAFT0 - R_ZAPFEN) - 0.01, z_hals + 0.01, ya),
+              halbkugel(z_hals, R_SCHAFT1, ya)]
     s = trimesh.boolean.union(aussen, engine='manifold')
-    # innen hohl: Zapfen und Schaft, oben mit 45°-Spitze geschlossen
+    # innen hohl: Zapfen und Schaft, oben mit 45°-Spitze geschlossen (unter der Halbkugel)
     ri0 = R_ZAPFEN - T_SCHAFT
     ri1 = R_SCHAFT1 - T_SCHAFT
-    zi_end = z_hals - 1.0
+    zi_end = z_hals - ri1
     innen = [kegelrohr(ri0, ri0, z_bohr - 1, z_kap + 0.5, ya),
              kegelrohr(R_SCHAFT0 - T_SCHAFT, ri1, z_kap + 0.5, zi_end, ya),
              kegelrohr(ri1, 0.01, zi_end, zi_end + ri1, ya)]
