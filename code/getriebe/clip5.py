@@ -5,7 +5,8 @@ Getragen: Unterseite des Unterteils am Körper, Schlauchflansch (-x) zeigt nach 
 (von der Trägerin aus links). Der Sockel (4 mm, von unten ausgespart, Rand + Rippen + Schraubdome) schafft Platz
 für zwei M3-Gewinde (Kernloch Ø 2,6, 5 tief, 1 mm unter dem Innenboden). Der Clip ist ein Profil
 (Zunge, Gurtspalt 4,5, Platte 3), extrudiert in y (Breite 26) und liegend gedruckt (Biegung in der Schichtebene).
-Befestigung: 2 × M3×8 Senkkopf (DIN 7991) von der Gurtseite durch die Platte. Gehäuse-Innenteile unverändert
+Befestigung: 2 × M3×8 Senkkopf (DIN 7991) von der Gurtseite durch die Platte; Kopf und Schraubendreher gehen
+durch zwei Zugangslöcher Ø 6,8 in der Zunge. Gehäuse-Innenteile unverändert
 (Rad, Schnecke, Welle, Drehrad, Deckel wie winde4).
 
 Aufruf: NSTART=4 python3 clip5.py   -> out/winde5_gehaeuse_unterteil.*, out/winde5_guertelclip.*, out/winde5_ansicht.png
@@ -19,7 +20,8 @@ from build3 import V, box, cylz, cylx, one, rot, on_bed, export, OX0, OX1, OY0, 
 
 T_SOCKEL = 4.0
 Z_S = Z_BOT - T_SOCKEL                 # neue Unterseite (-20,4)
-SCREWS = [(-8.0, 0.0), (17.0, 0.0)]    # (x, y) der Clipschrauben
+SCREWS = [(4.0, 0.0), (19.0, 0.0)]     # (x, y) der Clipschrauben (im unteren Teil der Zunge, weg von der Biegung)
+R_ZUGANG = 3.4                         # Zugangsloch Ø 6,8 in der Zunge für Kopf und Schraubendreher
 R_KERN, T_KERN = 1.3, 5.0
 RAND = 2.0
 
@@ -82,6 +84,7 @@ def clip():
         cs = cq.Solid.makeCone(3.2, 1.7, 1.5, V(u, W_PL0 - 0.01, B_CLIP / 2 + y), V(0, 1, 0))
         cs2 = cq.Solid.makeCylinder(3.2, 1.0, V(u, W_PL0 - 1.0, B_CLIP / 2 + y), V(0, 1, 0))
         w = w.cut(hole).cut(cs).cut(cs2)
+        w = w.cut(cq.Solid.makeCylinder(R_ZUGANG, T_ZUNGE + 2, V(u, -1.0, B_CLIP / 2 + y), V(0, 1, 0)))
     return one(w)
 
 
