@@ -115,6 +115,8 @@ Code: `code/getriebe/`. Generator ist `build4.py` (nutzt `build3.py`, `worm3.py`
   - Rad–Schnecke 0,167, Schnecke–Gehäuse 0,196, Drehrad–Schnecke 0,147.
 - **Beim Einkleben** der Welle liegt sie im Unterteil, mit Backpapier dazwischen.
 
+- **Gürtelclip (15.11., gerechnet, nicht gedruckt), Peter bleibt bei der Handwinde:** `code/getriebe/clip5.py` (`NSTART=4 python3 clip5.py`). Neues Unterteil `winde5_gehaeuse_unterteil` = winde4-Unterteil plus **Sockel 4 mm** unten (von unten ausgespart: Rand 2, Rippen, Dome), darin 2 × M3-Kernloch Ø 2,6 × 5 bei (x −8 / +17, y 0), 1 mm unter dem Innenboden. Bremsgewindestift wird damit 4 mm länger. `winde5_guertelclip` (Profil wie der alte Bedienhalter: Zunge 2,6, Gurtspalt 4,5 × 44 für Gürtel bis 40, Platte 3, Rastnase; 26 breit, liegend gedruckt), befestigt mit 2 × M3×8 Senkkopf von der Gurtseite. Getragen: Unterseite am Körper, Schlauchflansch oben, Drehrad an der linken Seite der Trägerin, Drehrad-Unterkante 7,5 mm vor der Körperseite. Geprüft: keine Durchdringung Clip/Unterteil/Drehrad, Stützen praktisch keine. Deckel und alle Innenteile unverändert; `winde4_gehaeuse_unterteil` ins Archiv. Ansicht `winde5_ansicht.png`. Der alte Bedienhalter (Teil D) ist mit Feder + Schnur überholt.
+
 Überholt (Archiv in `teile/archiv/winde/`): `winde_*`, `winde2_*` (außer dem Rad), `winde3_*` (außer dem Drehrad).
 
 **Erwogen, aber zurückgestellt:**
