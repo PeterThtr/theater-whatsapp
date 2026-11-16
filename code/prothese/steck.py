@@ -238,7 +238,7 @@ def teile_schaft(s, L, z_bohr, ya, z_kap, z_hals):
     return stuecke, verbinder
 
 
-def zapfen_oben(zc, z_kap, z_hals, ya, luft=0.075, fase=0.25):
+def zapfen_oben(zc, z_kap, z_hals, ya, luft=0.25, fase=0.25):   # luft 0,075 war gedruckt zu stramm (16.11.)
     """Angeformter Zapfen oben auf dem unteren Stück (16.11.): Innen wird die Wand unter dem Stoß mit 45° bis auf
     die Zapfenwand verdickt (außen bleibt alles glatt, keine Fuge), darüber ein Rohr STOSS_L lang, außen = engste
     Bohrung des oberen Stücks (STOSS_L über dem Stoß) − luft, Einführfase oben. Wird stehend ohne Stützen gedruckt."""
