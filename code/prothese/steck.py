@@ -41,6 +41,7 @@ R_SCHAFT0 = 7.4               # außen am Kappenende
 R_SCHAFT1 = 4.5               # außen am Schaftende = Radius der End-Halbkugel
 T_SCHAFT = 0.9
 R_KURZ = 8.0                  # Halbkugel der kurzen Nase
+ZAPFEN_ANGEFORMT = True       # Stöße: Zapfen oben am unteren Stück (sonst lose Steckhülsen)
 STOSS_L = 10.0                # Steckzapfen an den Stößen des 400er-Schafts
 H_MAX = 178.0               # A1 Mini: 180 mm Bauhöhe
 
@@ -226,9 +227,30 @@ def teile_schaft(s, L, z_bohr, ya, z_kap, z_hals):
     stuecke = []
     for i in range(n):
         box = trimesh.creation.box(bounds=[[-50, ya - 50, grenzen[i]], [50, ya + 50, grenzen[i + 1]]])
-        stuecke.append(trimesh.boolean.intersection([s, box], engine='manifold'))
+        st = trimesh.boolean.intersection([s, box], engine='manifold')
+        if ZAPFEN_ANGEFORMT and i < n - 1:
+            st = trimesh.boolean.union([st, zapfen_oben(grenzen[i + 1], z_kap, z_hals, ya)], engine='manifold')
+            assert len(st.split(only_watertight=False)) == 1, 'Zapfen hängt nicht am Stück'
+        stuecke.append(st)
+    if ZAPFEN_ANGEFORMT:
+        return stuecke, []
     verbinder = [verbinder_huelse(r_aussen(zc, z_kap, z_hals) - T_SCHAFT) for zc in cuts]
     return stuecke, verbinder
+
+
+def zapfen_oben(zc, z_kap, z_hals, ya, luft=0.075, fase=0.25):
+    """Angeformter Zapfen oben auf dem unteren Stück (16.11.): Innen wird die Wand unter dem Stoß mit 45° bis auf
+    die Zapfenwand verdickt (außen bleibt alles glatt, keine Fuge), darüber ein Rohr STOSS_L lang, außen = engste
+    Bohrung des oberen Stücks (STOSS_L über dem Stoß) − luft, Einführfase oben. Wird stehend ohne Stützen gedruckt."""
+    ri = r_aussen(zc, z_kap, z_hals) - T_SCHAFT                     # Bohrung am Stoß
+    ra = r_aussen(zc + STOSS_L, z_kap, z_hals) - T_SCHAFT - luft     # Zapfen außen
+    rz = ra - T_SCHAFT                                                # Zapfen innen
+    c = ri - rz                                                       # 45°-Verdickung innen
+    profil = np.array([[ri + 0.05, zc - c - 0.2], [ri + 0.05, zc + 0.01], [ra, zc + 0.01], [ra, zc + STOSS_L - fase],
+                       [ra - fase, zc + STOSS_L], [rz, zc + STOSS_L], [rz, zc], [ri, zc - c - 0.2], [ri + 0.05, zc - c - 0.2]])
+    m = trimesh.creation.revolve(profil, sections=128)
+    m.apply_translation([0, ya, 0])
+    return m
 
 
 def verbinder_huelse(ri, luft=0.12, wand=0.8, fase=0.4):
@@ -254,6 +276,7 @@ def main():
     ap.add_argument('--laengen', default='200,400')
     ap.add_argument('--klemm', default=None, help='zusätzliche seitliche Pressung in mm je Seite, z. B. 0.4 oder 0.4,0.8 (Dateien mit _klemmXX)')
     ap.add_argument('--nur-kappen', action='store_true')
+    ap.add_argument('--wand-schaft', type=float, default=None, help='Wandstärke des Schafts (Standard 0,9)')
     ap.add_argument('--hmax', type=float, default=None, help='größte Teilhöhe des Schafts (A1 Mini 178, A1 250)')
     ap.add_argument('--peter', action='store_true', help='Peters eigener Scan ohne Verzerrung, Dateien mit _peter')
     a = ap.parse_args(); os.makedirs(a.out, exist_ok=True)
@@ -261,6 +284,9 @@ def main():
     PETER = a.peter
     if a.hmax:
         H_MAX = a.hmax
+    global T_SCHAFT
+    if a.wand_schaft:
+        T_SCHAFT = a.wand_schaft
     rho_tpu, rho_petg = 1.21, 1.27
     global KLEMM
     stufen = [None] if a.klemm is None else [float(x) for x in a.klemm.split(',')]
@@ -293,7 +319,7 @@ def main():
         s.export(os.path.join(a.out, f'stecknase_{L:.0f}_schaft_lage_scan.stl'))
         for i, st in enumerate(stuecke):
             st = P.hauptkoerper(st)
-            nm = f'stecknase_{L:.0f}_schaft' + (f'_teil{i+1}' if len(stuecke) > 1 else '') + '_petg.stl'
+            nm = f'stecknase_{L:.0f}_schaft' + (f'_wand{int(round(T_SCHAFT*10)):02d}' if T_SCHAFT != 0.9 else '') + (f'_teil{i+1}' if len(stuecke) > 1 else '') + '_petg.stl'
             d = druck_stehend(st); d.export(os.path.join(a.out, nm))
             print(f"   {nm}: Höhe {d.extents[2]:.0f} mm, wasserdicht {d.is_watertight}")
 
