@@ -191,30 +191,30 @@ def r_aussen(z, z_kap, z_hals):
 
 
 def teile_schaft(s, L, z_bohr, ya, z_kap, z_hals):
-    """Schaft in Stücke < H_MAX zerlegen. Stoß: unteres Stück innen auf STOSS_L zylindrisch, oberes Stück bekommt
-    einen Zapfen (außen = Innenradius - 0,1)."""
+    """Schaft in Stücke < H_MAX zerlegen (glatte Schnitte). Verbunden werden die Stücke mit einzelnen Steckhülsen
+    (Verbinder), die je STOSS_L tief in beide Stücke greifen und eingeklebt werden. (Die angeformten Zapfen der
+    ersten Fassung hingen nicht am Stück und fielen beim Export weg, 16.11.)"""
     z_lo, z_hi = s.bounds[0, 2], s.bounds[1, 2]
-    n = 1 if z_hi - z_lo <= H_MAX else int(np.ceil((z_hi - z_lo) / (H_MAX - STOSS_L)))
+    n = 1 if z_hi - z_lo <= H_MAX else int(np.ceil((z_hi - z_lo) / H_MAX))
     if n <= 1:
-        return [s]
+        return [s], []
     cuts = [z_lo + (z_hi - z_lo) * i / n for i in range(1, n)]
-    stuecke = []
     grenzen = [z_lo - 1] + cuts + [z_hi + 1]
+    stuecke = []
     for i in range(n):
         box = trimesh.creation.box(bounds=[[-50, ya - 50, grenzen[i]], [50, ya + 50, grenzen[i + 1]]])
-        st = trimesh.boolean.intersection([s, box], engine='manifold')
-        if i > 0:                                   # Zapfen nach unten
-            zc = grenzen[i]
-            ri = r_aussen(zc, z_kap, z_hals) - T_SCHAFT
-            zap = kegelrohr(ri - 0.1, ri - 0.1, zc - STOSS_L, zc + 0.5, ya)
-            zap_i = kegelrohr(ri - 0.1 - T_SCHAFT, ri - 0.1 - T_SCHAFT, zc - STOSS_L - 1, zc + 0.6, ya)
-            st = trimesh.boolean.union([st, trimesh.boolean.difference([zap, zap_i], engine='manifold')], engine='manifold')
-        if i < n - 1:                               # Aufnahme oben: Innenraum auf STOSS_L zylindrisch aufweiten
-            zc = grenzen[i + 1]
-            ri = r_aussen(zc, z_kap, z_hals) - T_SCHAFT
-            st = trimesh.boolean.difference([st, kegelrohr(ri, ri, zc - STOSS_L - 0.3, zc + 1, ya)], engine='manifold')
-        stuecke.append(st)
-    return stuecke
+        stuecke.append(trimesh.boolean.intersection([s, box], engine='manifold'))
+    verbinder = [verbinder_huelse(r_aussen(zc, z_kap, z_hals) - T_SCHAFT) for zc in cuts]
+    return stuecke, verbinder
+
+
+def verbinder_huelse(ri, luft=0.12, wand=0.8, fase=0.4):
+    """Steckhülse für einen Stoß: außen = Bohrung am Stoß − Luft (die Bohrung wird nach vorn etwas enger, an der
+    Spitze bleiben etwa 0,02), Länge 2 × STOSS_L, Einführfasen an beiden Enden. Stehend drucken."""
+    ra = ri - luft
+    h = 2 * STOSS_L
+    pr = np.array([[ra - wand, 0], [ra - fase, 0], [ra, fase], [ra, h - fase], [ra - fase, h], [ra - wand, h], [ra - wand, 0]])
+    return trimesh.creation.revolve(pr, sections=96)
 
 
 def druck_kappe(k):
@@ -252,7 +252,11 @@ def main():
         return
     for L in (float(x) for x in a.laengen.split(',')):
         s, (z_kap, z_hals) = schaft(L, info['z_bohr'], ya)
-        stuecke = teile_schaft(s, L, info['z_bohr'], ya, z_kap, z_hals)
+        stuecke, verbinder = teile_schaft(s, L, info['z_bohr'], ya, z_kap, z_hals)
+        for i, v in enumerate(verbinder):
+            nm = f'stecknase_{L:.0f}_verbinder{i+1}{i+2}.stl'
+            v.export(os.path.join(a.out, nm))
+            print(f"   {nm}: außen Ø{2*v.bounds[1,0]:.2f}, Länge {v.extents[2]:.0f}, wasserdicht {v.is_watertight}")
         g = s.volume / 1000 * rho_petg
         # Hebel: Schwerpunkt (Schaft + Kappe) vor dem Gesicht
         zs = s.center_mass[2]
