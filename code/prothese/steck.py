@@ -23,6 +23,9 @@ A = P.A
 NASE = (49.2, 31.8, 27.8)
 SPIEL = -0.15                 # Pressung der Kappe
 T_WAND, T_RAND = 1.4, 0.6     # Kappe, zum Rand dünner (legt sich an)
+STUETZ_B = 0.8                # Stützwand unter dem Rand (zum Abschneiden nach dem Druck)
+STUETZ_Z = 0.0                # nur Randstücke hinter dieser Höhe (hinterer Rand auf den Wangen) bekommen eine Wand
+SEITE = +1                    # diese Hälfte (x > 0) wird gespiegelt -> symmetrische Kappe
 # Steckverbindung Kappe/Schaft
 R_ZAPFEN = 6.2                # Zapfen am Schaft (Ø 12,4)
 R_BOHR = 6.0                  # Bohrung in der TPU-Hülse (0,4 Übermaß im Ø)
@@ -63,7 +66,9 @@ def kappe_basis(scan):
     A.OUTLINE = P.OUTLINE_P; A.UNTEN_Z = P.UNTEN_Z_P
     m = A.lade(scan, 1.0)
     p = A.waehle_flaechen(m, 1.0)
-    schale, *_ = A.baue_schale(p, 1.0)
+    schale, _d, t_rand, (Vs, Fs, Ns, _rv) = A.baue_schale(p, 1.0)
+    global RAND
+    RAND = (Vs, Fs, Ns, t_rand)
     pv = A.waehle_flaechen(m, 1.0, outline=P.NASEN_UMRISS, unten_frei=False)
     trimesh.smoothing.filter_taubin(pv, lamb=0.5, nu=-0.53, iterations=12)
     Vv = np.asarray(pv.vertices); Nv = A.glatte_normalen(pv)
@@ -90,9 +95,45 @@ def kappe(scan, variante):
     aus = trimesh.boolean.union(teile, engine='manifold')
     aus = trimesh.boolean.union([aus, P.verrunden(aus, 4.0)], engine='manifold')
     k = trimesh.boolean.difference([aus] + cut, engine='manifold')
+    k = symmetrisch_mit_stuetze(k)
     teile_k = sorted(k.split(only_watertight=False), key=lambda q: -abs(q.volume))
     info['koerper'] = [round(abs(q.volume) / 1000, 2) for q in teile_k[:4]]
     return P.hauptkoerper(k), info, (z_tip, ya)
+
+
+def stuetzwand(z_bett):
+    """Senkrechte Wand (Breite STUETZ_B) unter dem hinteren Rand bis zur Druckplatte z_bett. Oben 0,3 in den Rand
+    eingebettet; wird nach dem Druck mit dem Messer am Rand entlang abgeschnitten."""
+    V, F, N, t = RAND
+    rand = A.randkanten(F)
+    mitte = V + (SPIEL + 0.5 * t)[:, None] * N
+    keile = []
+    for a_, b_ in rand:
+        pa, pb = mitte[a_], mitte[b_]
+        if max(pa[2], pb[2]) > STUETZ_Z:
+            continue
+        d = pb[:2] - pa[:2]; l = np.linalg.norm(d)
+        if l < 1e-6:
+            continue
+        n = np.array([-d[1], d[0]]) / l * STUETZ_B / 2
+        e = d / l * 0.15                               # leicht überlappend, damit die Stücke verschmelzen
+        unten = [np.r_[pa[:2] - e + n, z_bett], np.r_[pa[:2] - e - n, z_bett], np.r_[pb[:2] + e - n, z_bett], np.r_[pb[:2] + e + n, z_bett]]
+        oben = [np.r_[pa[:2] - e + n, pa[2] + 0.3], np.r_[pa[:2] - e - n, pa[2] + 0.3], np.r_[pb[:2] + e - n, pb[2] + 0.3], np.r_[pb[:2] + e + n, pb[2] + 0.3]]
+        keile.append(trimesh.convex.convex_hull(np.array(unten + oben)))
+    return trimesh.boolean.union(keile, engine='manifold')
+
+
+def symmetrisch_mit_stuetze(k):
+    """Hälfte SEITE behalten und spiegeln (links = rechts), dazu die Stützwand bis zur Druckplatte."""
+    groß = 200.0
+    box = trimesh.creation.box(bounds=[[0.0, -groß, -groß], [groß, groß, groß]]) if SEITE > 0 else \
+        trimesh.creation.box(bounds=[[-groß, -groß, -groß], [0.0, groß, groß]])
+    halb = trimesh.boolean.intersection([k, box], engine='manifold')
+    z_bett = float(halb.bounds[0, 2])
+    w = stuetzwand(z_bett)
+    w = trimesh.boolean.intersection([w, box], engine='manifold')
+    halb = trimesh.boolean.union([halb, w], engine='manifold')
+    return trimesh.boolean.union([halb, P.spiegeln_x(halb)], engine='manifold')
 
 
 def schaft(L, z_bohr, ya):
