@@ -22,6 +22,8 @@ A = P.A
 
 NASE = (49.2, 31.8, 27.8)       # Frauennase (Verzerrung); mit --peter Peters eigener Scan ohne Verzerrung
 SPIEL = -0.15                 # Pressung der Kappe (überall)
+KLEMM_GESICHT = 0.0           # zusätzliche Pressung zum Gesicht hin (per --klammer)
+Z_GESICHT0, Z_GESICHT1 = 12.0, -4.0   # ab Z0 beginnt die Zusatzpressung, ab Z1 voll (Nasenspitze Z ~22)
 KLEMM = 0.6                   # zusätzliche Pressung seitlich (mm je Seite, gewichtet mit |n_x|), per --klemm
 T_WAND, T_RAND = 2.4, 1.2     # Kappe kräftig (16.11.: 1,4/0,6 hielt nicht), zum Rand etwas dünner
 PETER = False                 # --peter: Peters eigener Scan ohne Verzerrung (nur zum Ausprobieren; Ziel ist die Frauennase)
@@ -65,10 +67,16 @@ def kegelrohr(r0, r1, z0, z1, ya, n=96):
     m.apply_translation([0, ya, 0]); return m
 
 
-def spiel_feld(N):
+def spiel_feld(N, V=None):
     """Abstand Kappe-Haut je Punkt (negativ = Pressung): überall SPIEL, seitlich (Flanken der Nase, |n_x| groß)
-    zusätzlich bis KLEMM. So klemmt die Kappe die Nase von beiden Seiten wie eine Clownsnase."""
-    return SPIEL - KLEMM * np.clip(np.abs(N[:, 0]), 0, 1) ** 1.5
+    zusätzlich bis KLEMM, und zum Gesicht hin (kleines Z) an den Flanken noch einmal bis KLEMM_GESICHT
+    (16.11., Peter: am Rücken passt es, zum Gesicht hin muss sie enger werden)."""
+    nx = np.clip(np.abs(N[:, 0]), 0, 1)
+    s = SPIEL - KLEMM * nx ** 1.5
+    if V is not None and KLEMM_GESICHT > 0:
+        w = np.clip((Z_GESICHT0 - V[:, 2]) / (Z_GESICHT0 - Z_GESICHT1), 0, 1)
+        s = s - KLEMM_GESICHT * w * nx
+    return s
 
 
 def mitte_x(m):
@@ -114,14 +122,14 @@ def kappe_basis(scan):
     G = sparse.coo_matrix((w, (E[:, 0], E[:, 1])), shape=(nv, nv)); G = (G + G.T).tocsr()
     d = dijkstra(G, indices=rv, min_only=True)
     t = T_RAND + (T_WAND - T_RAND) * np.clip(d / A.T_AUSLAUF, 0, 1)
-    Vi = V + spiel_feld(N)[:, None] * N            # Innenfläche
+    Vi = V + spiel_feld(N, V)[:, None] * N         # Innenfläche
     schale = A.verdicke(Vi, F, N, t, spiel=0.0)
     global RAND
     RAND = (Vi, F, N, t)
     pv = A.waehle_flaechen(m, 1.0, outline=P.NASEN_UMRISS, unten_frei=False)
     trimesh.smoothing.filter_taubin(pv, lamb=0.5, nu=-0.53, iterations=12)
     Vv = np.asarray(pv.vertices); Nv = A.glatte_normalen(pv)
-    nase = A.verdicke(Vv + spiel_feld(Nv)[:, None] * Nv, np.asarray(pv.faces), np.tile([0.0, 0.0, -1.0], (len(Vv), 1)),
+    nase = A.verdicke(Vv + spiel_feld(Nv, Vv)[:, None] * Nv, np.asarray(pv.faces), np.tile([0.0, 0.0, -1.0], (len(Vv), 1)),
                       np.full(len(Vv), 60.0), spiel=0.0)
     z_tip = float(m.vertices[:, 2].max())
     return m, schale, nase, z_tip, P.YA
@@ -277,6 +285,8 @@ def main():
     ap.add_argument('--klemm', default=None, help='zusätzliche seitliche Pressung in mm je Seite, z. B. 0.4 oder 0.4,0.8 (Dateien mit _klemmXX)')
     ap.add_argument('--nur-kappen', action='store_true')
     ap.add_argument('--wand-schaft', type=float, default=None, help='Wandstärke des Schafts (Standard 0,9)')
+    ap.add_argument('--klammer', default=None, help='zusätzliche Pressung zum Gesicht hin, mm je Seite, z. B. 0.8,1.4 (Dateien mit _klammerXX)')
+    ap.add_argument('--rand', type=float, default=None, help='Wandstärke am Kappenrand (Standard 1,2)')
     ap.add_argument('--hmax', type=float, default=None, help='größte Teilhöhe des Schafts (A1 Mini 178, A1 250)')
     ap.add_argument('--peter', action='store_true', help='Peters eigener Scan ohne Verzerrung, Dateien mit _peter')
     a = ap.parse_args(); os.makedirs(a.out, exist_ok=True)
@@ -284,16 +294,23 @@ def main():
     PETER = a.peter
     if a.hmax:
         H_MAX = a.hmax
+    global T_RAND
+    if a.rand:
+        T_RAND = a.rand
     global T_SCHAFT
     if a.wand_schaft:
         T_SCHAFT = a.wand_schaft
     rho_tpu, rho_petg = 1.21, 1.27
-    global KLEMM
+    global KLEMM, KLEMM_GESICHT
     stufen = [None] if a.klemm is None else [float(x) for x in a.klemm.split(',')]
-    for kl in stufen:
+    gesicht = [None] if a.klammer is None else [float(x) for x in a.klammer.split(',')]
+    for kl, kg in [(x, y) for x in stufen for y in gesicht]:
         if kl is not None:
             KLEMM = kl
-        suf = ('_peter' if PETER else '') + ('' if kl is None else f'_klemm{int(round(kl * 10)):02d}')
+        if kg is not None:
+            KLEMM_GESICHT = kg
+        suf = ('_peter' if PETER else '') + ('' if kl is None else f'_klemm{int(round(kl * 10)):02d}') + \
+              ('' if kg is None else f'_klammer{int(round(kg * 10)):02d}')
         k, info, (z_tip, ya) = kappe(a.scan, 'kurz')
         k.export(os.path.join(a.out, f'stecknase_kurz_tpu{suf}_lage_scan.stl'))
         druck_kappe(k).export(os.path.join(a.out, f'stecknase_kurz_tpu{suf}.stl'))
