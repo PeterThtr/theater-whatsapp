@@ -21,8 +21,11 @@ sys.argv = sys.argv_save
 A = P.A
 
 NASE = (49.2, 31.8, 27.8)
-SPIEL = -0.15                 # Pressung der Kappe
-T_WAND, T_RAND = 1.4, 0.6     # Kappe, zum Rand dünner (legt sich an)
+SPIEL = -0.15                 # Pressung der Kappe (überall)
+KLEMM = 0.6                   # zusätzliche Pressung seitlich (mm je Seite, gewichtet mit |n_x|), per --klemm
+T_WAND, T_RAND = 2.4, 1.2     # Kappe kräftig (16.11.: 1,4/0,6 hielt nicht), zum Rand etwas dünner
+X_MITTE = -1.6                # Mittellinie der (verzerrten) Nase liegt bei x -1,6 (gemessen, sehr gleichmäßig) -> vor dem Spiegeln auf 0 schieben
+Y_OBEN = 21.0                 # Oberkante der Kappe am Nasenrücken (Scan-Y, unverzerrt; Prothese: 14)
 STUETZ_B = 0.8                # Stützwand unter dem Rand (zum Abschneiden nach dem Druck)
 STUETZ_Z = 0.0                # nur Randstücke hinter dieser Höhe (hinterer Rand auf den Wangen) bekommen eine Wand
 STUETZ_X = 10.0               # ... und nur seitlich (|x| > STUETZ_X): über dem Nasenrücken keine Wand (Peter, 16.11.)
@@ -60,20 +63,42 @@ def kegelrohr(r0, r1, z0, z1, ya, n=96):
     m.apply_translation([0, ya, 0]); return m
 
 
+def spiel_feld(N):
+    """Abstand Kappe-Haut je Punkt (negativ = Pressung): überall SPIEL, seitlich (Flanken der Nase, |n_x| groß)
+    zusätzlich bis KLEMM. So klemmt die Kappe die Nase von beiden Seiten wie eine Clownsnase."""
+    return SPIEL - KLEMM * np.clip(np.abs(N[:, 0]), 0, 1) ** 1.5
+
+
 def kappe_basis(scan):
     if not getattr(P, '_gemorpht', False):
         sx, sy, sz = P.morph_faktoren(*NASE); P.morph_konstanten(sx, sy, sz); P._gemorpht = True
-    A.T_WAND, A.T_RAND, A.SPIEL = T_WAND, T_RAND, SPIEL
+        P.OUTLINE_P = [(-9.5 * sx, Y_OBEN * sy), (9.5 * sx, Y_OBEN * sy)] + P.OUTLINE_P[2:]
+    A.T_WAND, A.T_RAND = T_WAND, T_RAND
     A.OUTLINE = P.OUTLINE_P; A.UNTEN_Z = P.UNTEN_Z_P
     m = A.lade(scan, 1.0)
+    m.apply_translation([-X_MITTE, 0.0, 0.0])      # Nasenmitte auf x = 0, sonst passt die gespiegelte Hälfte nicht
     p = A.waehle_flaechen(m, 1.0)
-    schale, _d, t_rand, (Vs, Fs, Ns, _rv) = A.baue_schale(p, 1.0)
+    # wie A.baue_schale, aber mit ortsabhängiger Pressung
+    trimesh.smoothing.filter_taubin(p, lamb=0.5, nu=-0.53, iterations=12)
+    V = np.asarray(p.vertices); F = np.asarray(p.faces); nv = len(V)
+    N = A.glatte_normalen(p)
+    rv = np.array(sorted({a for a, b in A.randkanten(F)}))
+    from scipy import sparse
+    from scipy.sparse.csgraph import dijkstra
+    E = p.edges_unique
+    w = np.linalg.norm(V[E[:, 0]] - V[E[:, 1]], axis=1)
+    G = sparse.coo_matrix((w, (E[:, 0], E[:, 1])), shape=(nv, nv)); G = (G + G.T).tocsr()
+    d = dijkstra(G, indices=rv, min_only=True)
+    t = T_RAND + (T_WAND - T_RAND) * np.clip(d / A.T_AUSLAUF, 0, 1)
+    Vi = V + spiel_feld(N)[:, None] * N            # Innenfläche
+    schale = A.verdicke(Vi, F, N, t, spiel=0.0)
     global RAND
-    RAND = (Vs, Fs, Ns, t_rand)
+    RAND = (Vi, F, N, t)
     pv = A.waehle_flaechen(m, 1.0, outline=P.NASEN_UMRISS, unten_frei=False)
     trimesh.smoothing.filter_taubin(pv, lamb=0.5, nu=-0.53, iterations=12)
     Vv = np.asarray(pv.vertices); Nv = A.glatte_normalen(pv)
-    nase = A.verdicke(Vv + SPIEL * Nv, np.asarray(pv.faces), np.tile([0.0, 0.0, -1.0], (len(Vv), 1)), np.full(len(Vv), 60.0), spiel=0.0)
+    nase = A.verdicke(Vv + spiel_feld(Nv)[:, None] * Nv, np.asarray(pv.faces), np.tile([0.0, 0.0, -1.0], (len(Vv), 1)),
+                      np.full(len(Vv), 60.0), spiel=0.0)
     z_tip = float(m.vertices[:, 2].max())
     return m, schale, nase, z_tip, P.YA
 
@@ -107,7 +132,7 @@ def stuetzwand(z_bett):
     eingebettet; wird nach dem Druck mit dem Messer am Rand entlang abgeschnitten."""
     V, F, N, t = RAND
     rand = A.randkanten(F)
-    mitte = V + (SPIEL + 0.5 * t)[:, None] * N
+    mitte = V + (0.5 * t)[:, None] * N              # V ist schon die Innenfläche
     keile = []
     for a_, b_ in rand:
         pa, pb = mitte[a_], mitte[b_]
@@ -204,17 +229,27 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('scan'); ap.add_argument('--out', default='out/')
     ap.add_argument('--laengen', default='200,400')
+    ap.add_argument('--klemm', default=None, help='zusätzliche seitliche Pressung in mm je Seite, z. B. 0.4 oder 0.4,0.8 (Dateien mit _klemmXX)')
+    ap.add_argument('--nur-kappen', action='store_true')
     a = ap.parse_args(); os.makedirs(a.out, exist_ok=True)
     rho_tpu, rho_petg = 1.21, 1.27
-    k, info, (z_tip, ya) = kappe(a.scan, 'kurz')
-    k.export(os.path.join(a.out, 'stecknase_kurz_tpu_lage_scan.stl'))
-    druck_kappe(k).export(os.path.join(a.out, 'stecknase_kurz_tpu.stl'))
-    print('Körper (cm³):', info['koerper'])
-    print(f"kurz: L {info['L']:.0f} mm ab Gesicht (Z 0), {k.volume/1000:.1f} cm³ = {k.volume/1000*rho_tpu:.1f} g TPU, wasserdicht {k.is_watertight}")
-    kh, info, _ = kappe(a.scan, 'lang')
-    kh.export(os.path.join(a.out, 'stecknase_kappe_tpu_lage_scan.stl'))
-    druck_kappe(kh).export(os.path.join(a.out, 'stecknase_kappe_tpu.stl'))
-    print(f"Kappe mit Steckhülse: {kh.volume/1000:.1f} cm³ = {kh.volume/1000*rho_tpu:.1f} g TPU, wasserdicht {kh.is_watertight}")
+    global KLEMM
+    stufen = [None] if a.klemm is None else [float(x) for x in a.klemm.split(',')]
+    for kl in stufen:
+        if kl is not None:
+            KLEMM = kl
+        suf = '' if kl is None else f'_klemm{int(round(kl * 10)):02d}'
+        k, info, (z_tip, ya) = kappe(a.scan, 'kurz')
+        k.export(os.path.join(a.out, f'stecknase_kurz_tpu{suf}_lage_scan.stl'))
+        druck_kappe(k).export(os.path.join(a.out, f'stecknase_kurz_tpu{suf}.stl'))
+        print(f"kurz{suf}: L {info['L']:.0f} mm ab Gesicht (Z 0), {k.volume/1000:.1f} cm³ = {k.volume/1000*rho_tpu:.1f} g TPU, "
+              f"wasserdicht {k.is_watertight}, Körper {info['koerper']}")
+        kh, info, _ = kappe(a.scan, 'lang')
+        kh.export(os.path.join(a.out, f'stecknase_kappe_tpu{suf}_lage_scan.stl'))
+        druck_kappe(kh).export(os.path.join(a.out, f'stecknase_kappe_tpu{suf}.stl'))
+        print(f"Kappe mit Steckhülse{suf}: {kh.volume/1000:.1f} cm³ = {kh.volume/1000*rho_tpu:.1f} g TPU, wasserdicht {kh.is_watertight}")
+    if a.nur_kappen:
+        return
     for L in (float(x) for x in a.laengen.split(',')):
         s, (z_kap, z_hals) = schaft(L, info['z_bohr'], ya)
         stuecke = teile_schaft(s, L, info['z_bohr'], ya, z_kap, z_hals)
