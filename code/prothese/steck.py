@@ -254,10 +254,13 @@ def main():
     ap.add_argument('--laengen', default='200,400')
     ap.add_argument('--klemm', default=None, help='zusätzliche seitliche Pressung in mm je Seite, z. B. 0.4 oder 0.4,0.8 (Dateien mit _klemmXX)')
     ap.add_argument('--nur-kappen', action='store_true')
+    ap.add_argument('--hmax', type=float, default=None, help='größte Teilhöhe des Schafts (A1 Mini 178, A1 250)')
     ap.add_argument('--peter', action='store_true', help='Peters eigener Scan ohne Verzerrung, Dateien mit _peter')
     a = ap.parse_args(); os.makedirs(a.out, exist_ok=True)
-    global PETER
+    global PETER, H_MAX
     PETER = a.peter
+    if a.hmax:
+        H_MAX = a.hmax
     rho_tpu, rho_petg = 1.21, 1.27
     global KLEMM
     stufen = [None] if a.klemm is None else [float(x) for x in a.klemm.split(',')]
