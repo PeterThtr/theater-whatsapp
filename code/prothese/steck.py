@@ -20,12 +20,13 @@ import prothese as P
 sys.argv = sys.argv_save
 A = P.A
 
-NASE = (49.2, 31.8, 27.8)
+NASE = (49.2, 31.8, 27.8)       # Frauennase (Verzerrung); mit --peter Peters eigener Scan ohne Verzerrung
 SPIEL = -0.15                 # Pressung der Kappe (überall)
 KLEMM = 0.6                   # zusätzliche Pressung seitlich (mm je Seite, gewichtet mit |n_x|), per --klemm
 T_WAND, T_RAND = 2.4, 1.2     # Kappe kräftig (16.11.: 1,4/0,6 hielt nicht), zum Rand etwas dünner
+PETER = False                 # --peter: Peters eigener Scan ohne Verzerrung (nur zum Ausprobieren; Ziel ist die Frauennase)
 X_MITTE = -1.6                # Mittellinie der (verzerrten) Nase liegt bei x -1,6 (gemessen, sehr gleichmäßig) -> vor dem Spiegeln auf 0 schieben
-Y_OBEN = 21.0                 # Oberkante der Kappe am Nasenrücken (Scan-Y, unverzerrt; Prothese: 14)
+Y_OBEN = 31.0                 # Oberkante der Kappe (Scan-Y, unverzerrt): über die Nasenwurzel (Y 25) hinaus, 16.11. (vorher 21; Prothese: 14)
 STUETZ_B = 0.8                # Stützwand unter dem Rand (zum Abschneiden nach dem Druck)
 STUETZ_Z = 0.0                # nur Randstücke hinter dieser Höhe (hinterer Rand auf den Wangen) bekommen eine Wand
 STUETZ_X = 10.0               # ... und nur seitlich (|x| > STUETZ_X): über dem Nasenrücken keine Wand (Peter, 16.11.)
@@ -69,14 +70,36 @@ def spiel_feld(N):
     return SPIEL - KLEMM * np.clip(np.abs(N[:, 0]), 0, 1) ** 1.5
 
 
+def mitte_x(m):
+    """Mittellinie der Nase in x: Mitte zwischen linker und rechter Hautfläche, 2–10 mm unter dem Rücken, Y −20…+20."""
+    rs = m.ray
+    xs = []
+    for y in range(-20, 21, 3):
+        loc, _, _ = rs.intersects_location([[0, y, 80]], [[0, 0, -1]])
+        if not len(loc):
+            continue
+        zs = loc[:, 2].max()
+        for dz in (2, 4, 6, 8, 10):
+            o = [[0, y, zs - dz]]
+            L, _, _ = rs.intersects_location(o, [[-1, 0, 0]]); R, _, _ = rs.intersects_location(o, [[1, 0, 0]])
+            if len(L) and len(R):
+                xs.append(0.5 * (L[:, 0].max() + R[:, 0].min()))
+    return float(np.median(xs))
+
+
 def kappe_basis(scan):
     if not getattr(P, '_gemorpht', False):
-        sx, sy, sz = P.morph_faktoren(*NASE); P.morph_konstanten(sx, sy, sz); P._gemorpht = True
+        sx, sy, sz = (1.0, 1.0, 1.0) if PETER else P.morph_faktoren(*NASE)
+        if not PETER:
+            P.morph_konstanten(sx, sy, sz)
         P.OUTLINE_P = [(-9.5 * sx, Y_OBEN * sy), (9.5 * sx, Y_OBEN * sy)] + P.OUTLINE_P[2:]
+        P._gemorpht = True
     A.T_WAND, A.T_RAND = T_WAND, T_RAND
     A.OUTLINE = P.OUTLINE_P; A.UNTEN_Z = P.UNTEN_Z_P
     m = A.lade(scan, 1.0)
-    m.apply_translation([-X_MITTE, 0.0, 0.0])      # Nasenmitte auf x = 0, sonst passt die gespiegelte Hälfte nicht
+    xm = mitte_x(m)                                 # Nasenmitte auf x = 0, sonst passt die gespiegelte Hälfte nicht
+    m.apply_translation([-xm, 0.0, 0.0])
+    print(f'Nasenmitte x {xm:.2f} -> 0')
     p = A.waehle_flaechen(m, 1.0)
     # wie A.baue_schale, aber mit ortsabhängiger Pressung
     trimesh.smoothing.filter_taubin(p, lamb=0.5, nu=-0.53, iterations=12)
@@ -231,14 +254,17 @@ def main():
     ap.add_argument('--laengen', default='200,400')
     ap.add_argument('--klemm', default=None, help='zusätzliche seitliche Pressung in mm je Seite, z. B. 0.4 oder 0.4,0.8 (Dateien mit _klemmXX)')
     ap.add_argument('--nur-kappen', action='store_true')
+    ap.add_argument('--peter', action='store_true', help='Peters eigener Scan ohne Verzerrung, Dateien mit _peter')
     a = ap.parse_args(); os.makedirs(a.out, exist_ok=True)
+    global PETER
+    PETER = a.peter
     rho_tpu, rho_petg = 1.21, 1.27
     global KLEMM
     stufen = [None] if a.klemm is None else [float(x) for x in a.klemm.split(',')]
     for kl in stufen:
         if kl is not None:
             KLEMM = kl
-        suf = '' if kl is None else f'_klemm{int(round(kl * 10)):02d}'
+        suf = ('_peter' if PETER else '') + ('' if kl is None else f'_klemm{int(round(kl * 10)):02d}')
         k, info, (z_tip, ya) = kappe(a.scan, 'kurz')
         k.export(os.path.join(a.out, f'stecknase_kurz_tpu{suf}_lage_scan.stl'))
         druck_kappe(k).export(os.path.join(a.out, f'stecknase_kurz_tpu{suf}.stl'))
