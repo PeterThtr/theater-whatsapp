@@ -25,6 +25,7 @@ SPIEL = -0.15                 # Pressung der Kappe
 T_WAND, T_RAND = 1.4, 0.6     # Kappe, zum Rand dünner (legt sich an)
 STUETZ_B = 0.8                # Stützwand unter dem Rand (zum Abschneiden nach dem Druck)
 STUETZ_Z = 0.0                # nur Randstücke hinter dieser Höhe (hinterer Rand auf den Wangen) bekommen eine Wand
+STUETZ_X = 10.0               # ... und nur seitlich (|x| > STUETZ_X): über dem Nasenrücken keine Wand (Peter, 16.11.)
 SEITE = +1                    # diese Hälfte (x > 0) wird gespiegelt -> symmetrische Kappe
 # Steckverbindung Kappe/Schaft
 R_ZAPFEN = 6.2                # Zapfen am Schaft (Ø 12,4)
@@ -110,7 +111,7 @@ def stuetzwand(z_bett):
     keile = []
     for a_, b_ in rand:
         pa, pb = mitte[a_], mitte[b_]
-        if max(pa[2], pb[2]) > STUETZ_Z:
+        if max(pa[2], pb[2]) > STUETZ_Z or min(abs(pa[0]), abs(pb[0])) < STUETZ_X:
             continue
         d = pb[:2] - pa[:2]; l = np.linalg.norm(d)
         if l < 1e-6:
