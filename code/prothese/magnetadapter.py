@@ -59,6 +59,49 @@ def adapter_schaft():
     return s, z_m1, h
 
 
+# ---- Variante --vier (17.11.): 4 Magnete im Quadrat, Wechselpolung, offen (bündig einkleben), Bund 3 mm ----
+R_Q = 3.2                 # Teilkreis der Taschenmitten (Abstand der Mitten 4,53, Wand dazwischen 1,2, zum Rand 1,35)
+R_MAG4 = 1.65             # Tasche Ø 3,3 (gedruckt etwa 3,2, Kleberspalt)
+T_MAG4 = 17 * LH          # 2,04 tief: Magnet 2,0 sitzt 0,04 unter der Fläche
+BUND4 = 3.0               # Bund steht 3 mm aus der Hülse (Formschluss gegen Kippen)
+LUFT4 = 0.15              # radial im Bund (0,075 war beim 500er-Zapfen gedruckt zu stramm)
+T_VERT4 = 26 * LH         # 3,12: Bund liegt Stirn auf Boden auf, Rand des Schaftadapters bleibt frei von der Hülse
+
+
+def taschen(z_oben, tiefe):
+    out = []
+    for k in range(4):
+        import math
+        a = math.pi / 2 * k
+        v = cq.Vector(R_Q * math.cos(a), R_Q * math.sin(a), z_oben - tiefe)
+        out.append(cq.Solid.makeCylinder(R_MAG4, tiefe + 0.1, v))
+        out.append(cq.Solid.makeCone(R_MAG4, R_MAG4 + 0.2, 0.2, v + cq.Vector(0, 0, tiefe - 0.2)))   # Einführkante
+    return out
+
+
+def adapter_kappe4():
+    h = L_HUELSE + BUND4                                     # 15,0
+    s = revolve([(0, 0), (R_ZAPFEN - 0.5, 0), (R_ZAPFEN, 0.5), (R_ZAPFEN, h - 0.5), (R_ZAPFEN - 0.5, h), (0, h)])
+    s = s.cut(zyl(3.5, -0.1, h - T_MAG4 - 1.0))              # Gewicht sparen (unten offen)
+    for c in taschen(h, T_MAG4):
+        s = s.cut(c)
+    return s, h
+
+
+def adapter_schaft4():
+    z_v = round((L_MUFFE + 0.8 + T_MAG4) / LH) * LH          # Boden der Vertiefung = Magnetfläche
+    h = z_v + T_VERT4
+    r_v = R_ZAPFEN + LUFT4
+    s = revolve([(0, 0), (R_AUSSEN_B - 0.4, 0), (R_AUSSEN_B, 0.4), (R_AUSSEN_B, h - 0.3), (R_AUSSEN_B - 0.3, h), (0, h)])
+    s = s.cut(zyl(R_MUFFE, -0.1, L_MUFFE))
+    s = s.cut(cq.Solid.makeCone(R_MUFFE + 0.4, R_MUFFE, 0.4, cq.Vector(0, 0, -0.01)))
+    s = s.cut(zyl(r_v, z_v, h + 0.1))
+    s = s.cut(cq.Solid.makeCone(r_v, r_v + 0.4, 0.4, cq.Vector(0, 0, h - 0.4)))   # Einlauf
+    for c in taschen(z_v, T_MAG4):
+        s = s.cut(c)
+    return s, z_v, h
+
+
 if __name__ == '__main__':
     import sys
     suf = ''
@@ -66,6 +109,17 @@ if __name__ == '__main__':
         H_MAG = 36 * LH
         suf = '_2mag'
     os.makedirs(OUT, exist_ok=True)
+    if '--vier' in sys.argv:
+        a, ha = adapter_kappe4()
+        b, zv, hb = adapter_schaft4()
+        for nm, s in (('stecknase_adapter_kappe_pla_4mag', a), ('stecknase_adapter_schaft_pla_4mag', b)):
+            assert s.isValid() and len(s.Solids()) == 1, nm
+            cq.exporters.export(cq.Workplane().add(s), os.path.join(OUT, nm + '.stl'), tolerance=0.01, angularTolerance=0.1)
+            cq.exporters.export(cq.Workplane().add(s), os.path.join(OUT, nm + '.step'))
+            bb = s.BoundingBox()
+            print(f'{nm}: {bb.xlen:.2f} × {bb.ylen:.2f} × {bb.zlen:.2f} mm, {s.Volume() / 1000 * 1.24:.2f} g PLA')
+        print(f'Kappenadapter Höhe {ha:.2f}; Schaftadapter Boden Vertiefung {zv:.2f}, Höhe {hb:.2f}')
+        sys.exit()
     a, pa = adapter_kappe()
     b, pb, hb = adapter_schaft()
     for nm, s in (('stecknase_adapter_kappe_pla' + suf, a), ('stecknase_adapter_schaft_pla' + suf, b)):
