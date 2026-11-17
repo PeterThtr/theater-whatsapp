@@ -18,7 +18,7 @@ LH = 0.12
 R_ZAPFEN = 6.2            # wie der Schaftzapfen (TPU-Bohrung Ø 12,0)
 L_HUELSE = 12.0           # Tiefe der Bohrung in der TPU-Hülse
 UEBERSTAND = 1.0          # Bund vor der Hülse
-R_MAG, H_MAG = 1.65, 18 * LH      # Tasche Ø 3,3 × 2,16 für Magnet 3 × 2
+R_MAG, H_MAG = 1.65, 18 * LH      # Tasche Ø 3,3 × 2,16 für Magnet 3 × 2 (mit --zwei: 36 × LH = 4,32 für zwei hintereinander)
 HAUT = 2 * LH             # 0,24 über dem Magnet
 R_AUSSEN_B = 7.4          # wie der Schaft über dem Zapfen
 R_MUFFE = R_ZAPFEN + 0.12 # Schaftzapfen Ø 12,4 in Ø 12,64 (kleben)
@@ -38,7 +38,7 @@ def zyl(r, z0, z1):
 def adapter_kappe():
     h = L_HUELSE + UEBERSTAND                               # 13,0
     s = revolve([(0, 0), (R_ZAPFEN - 0.5, 0), (R_ZAPFEN, 0.5), (R_ZAPFEN, h - 0.3), (R_ZAPFEN - 0.3, h), (0, h)])
-    s = s.cut(zyl(3.5, -0.1, 8.0))                           # Gewicht sparen (unten offen, in der TPU-Hülse)
+    s = s.cut(zyl(3.5, -0.1, h - HAUT - H_MAG - 0.8))        # Gewicht sparen (unten offen, in der TPU-Hülse)
     z1 = h - HAUT
     s = s.cut(zyl(R_MAG, z1 - H_MAG, z1))
     return s, z1
@@ -60,10 +60,15 @@ def adapter_schaft():
 
 
 if __name__ == '__main__':
+    import sys
+    suf = ''
+    if '--zwei' in sys.argv:                                 # zwei Magnete hintereinander je Seite
+        H_MAG = 36 * LH
+        suf = '_2mag'
     os.makedirs(OUT, exist_ok=True)
     a, pa = adapter_kappe()
     b, pb, hb = adapter_schaft()
-    for nm, s in (('stecknase_adapter_kappe_pla', a), ('stecknase_adapter_schaft_pla', b)):
+    for nm, s in (('stecknase_adapter_kappe_pla' + suf, a), ('stecknase_adapter_schaft_pla' + suf, b)):
         assert s.isValid() and len(s.Solids()) == 1, nm
         cq.exporters.export(cq.Workplane().add(s), os.path.join(OUT, nm + '.stl'), tolerance=0.01, angularTolerance=0.1)
         cq.exporters.export(cq.Workplane().add(s), os.path.join(OUT, nm + '.step'))
